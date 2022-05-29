@@ -27,6 +27,7 @@ class Trajectory():
         self.flight_plan = flight_plan
         actual_cell = self.origin_cell
 
+        real_plan = ''  # if encountering shipyard, crop plan
         instructions_chunks = re.findall(r'(\d{0,2})([NSWE])', flight_plan)
         for nb_repeat, instruction in instructions_chunks:
             nb_repeat = 1 if not nb_repeat else nb_repeat  # '' handling
@@ -34,15 +35,21 @@ class Trajectory():
                 dir = Direction.from_char(instruction)
                 self.add(dir)
                 actual_cell = actual_cell.neighbor(dir.to_point())
+                real_plan += dir.to_char()
+
                 if actual_cell.shipyard:
                     self.finish_in_shipyard = True
                     break
+            break
         
         # See if last traj leads to shipyard
         for i in range(20):
             if actual_cell.shipyard:
                 self.leads_to_shipyard = True
             actual_cell = actual_cell.neighbor(self.instructions[-1].to_point())
+        
+        real_plan = compress(real_plan)
+        self.flight_plan = real_plan
 
     
     def evaluate(self):
@@ -89,7 +96,9 @@ def get_all_flight_plans_under_length(length: int) -> List[str]:
         # Finishing by direction
         # Quantifier always followed by direction
         match = re.search(r'^({quantifier}?{direction}+)+$'.format(quantifier=quantifier_re, direction=direction_re), plan)
-        return bool(match)
+        match2 = re.search(r'{direction}{direction}$'.format(direction=direction_re), plan)  # limit end  N15E == NE
+        match3 = re.search(r'(NN|WW|EE|SS)', plan)
+        return bool(match) and bool(match2) and not bool(match3)
 
     alphabet = 'NSWE0123456789'
     all_path = []
@@ -98,3 +107,26 @@ def get_all_flight_plans_under_length(length: int) -> List[str]:
         _valid_paths = [path for path in _paths if _is_flight_plan_conform(path)]
         all_path.extend(_valid_paths)
     return all_path
+
+
+def compress(expanded_flight_plan: str) -> str:
+    '''
+        Compress an expanded flight plan (EEEEENSS) into a compact one (5EN2S) while maintaining the order.
+    '''
+    res = ''
+    cursor = ''
+    counter = 1
+    for s in expanded_flight_plan:
+        if not cursor:
+            cursor = s
+            continue
+        if s == cursor:
+            counter += 1
+        else:
+            res += f'{counter}{cursor}'
+            cursor = s
+            counter = 1
+
+    res += f'{counter}{cursor}'
+    res = re.sub(r'(?<!\d)(1)(?=[NSWE])', '', res)
+    return res
