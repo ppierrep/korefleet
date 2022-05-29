@@ -9,6 +9,8 @@ class Trajectory():
     def __init__(self, origin_cell: Cell) -> None:
         self.instructions: List[Direction] = []
         self.origin_cell = origin_cell
+        self.kore = None
+        self.kore_inclunding_drift = None
 
     def add_from(self, last_traj):
         if last_traj:
@@ -16,6 +18,24 @@ class Trajectory():
 
     def add(self, dir: Direction):
         self.instructions.append(dir)
+    
+    def evaluate(self):
+        # TODO: Take in account kore regeneration and timelaps
+        actual_cell = self.origin_cell
+        self.kore = 0
+        self.kore_inclunding_drift = 0
+
+        for _dir in self.instructions:
+            actual_cell = actual_cell.neighbor(_dir.to_point())
+            self.kore += actual_cell.kore
+        
+        self.kore_inclunding_drift = self.kore
+        for i in range(40):
+            if actual_cell.shipyard:
+                break
+
+            actual_cell = actual_cell.neighbor(self.instructions[-1].to_point())
+            self.kore_inclunding_drift += actual_cell.kore
     
     def __repr__(self) -> str:
         return f"{self.instructions}"

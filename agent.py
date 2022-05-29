@@ -22,7 +22,12 @@ def agent(obs, config):
             shipyard.next_action = action
  
 
-            print(len(map.list_available_route(shipyard.cell, 4)))
+            for path in map.list_available_route(shipyard.cell, 2):
+                print('-------------')
+                print(path)
+                path.evaluate()
+                print(path.kore)
+                print(path.kore_inclunding_drift)
 
 
     return me.next_actions
