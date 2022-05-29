@@ -1,5 +1,5 @@
 
-from map import Map, get_all_flight_plans_under_length, convert_flight_plan_to_trajectories
+from map import Map, get_all_flight_plans_under_length
 from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction
 from time import sleep
 
@@ -15,9 +15,15 @@ def agent(obs, config):
     spawn_cost = board.configuration.spawn_cost
     kore_left = me.kore
 
-    paths = get_all_flight_plans_under_length(4)
-    print(len(paths))
-    trajectories = map.convert_flight_plan_to_trajectories(paths)
+    paths = get_all_flight_plans_under_length(6)
+    trajectories = map.convert_flight_plan_to_trajectories(me.shipyards[0].cell, paths)
+    for trajectory in trajectories:
+        trajectory.evaluate()
+    
+    res = sorted([traj for traj in trajectories if traj.finish_in_shipyard], key=lambda x: x.kore, reverse=True)
+    print(len(res))
+    print([(len(i.instructions), i.kore, i.flight_plan) for i in res[:5]])
+
     # # loop through all shipyards you control
     # for shipyard in me.shipyards:
     #     # build a ship!

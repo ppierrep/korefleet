@@ -10,8 +10,11 @@ class Trajectory():
     def __init__(self, origin_cell: Cell) -> None:
         self.instructions: List[Direction] = []
         self.origin_cell = origin_cell
+        self.flight_plan = None
         self.kore = None
         self.kore_inclunding_drift = None
+        self.finish_in_shipyard = None
+        self.leads_to_shipyard = None
 
     def add_from(self, last_traj):
         if last_traj:
@@ -19,6 +22,28 @@ class Trajectory():
 
     def add(self, dir: Direction):
         self.instructions.append(dir)
+    
+    def set_flight_plan(self, flight_plan: str) -> None:
+        self.flight_plan = flight_plan
+        actual_cell = self.origin_cell
+
+        instructions_chunks = re.findall(r'(\d{0,2})([NSWE])', flight_plan)
+        for nb_repeat, instruction in instructions_chunks:
+            nb_repeat = 1 if not nb_repeat else nb_repeat  # '' handling
+            for i in range(int(nb_repeat)):
+                dir = Direction.from_char(instruction)
+                self.add(dir)
+                actual_cell = actual_cell.neighbor(dir.to_point())
+                if actual_cell.shipyard:
+                    self.finish_in_shipyard = True
+                    break
+        
+        # See if last traj leads to shipyard
+        for i in range(20):
+            if actual_cell.shipyard:
+                self.leads_to_shipyard = True
+            actual_cell = actual_cell.neighbor(self.instructions[-1].to_point())
+
     
     def evaluate(self):
         # TODO: Take in account kore regeneration and timelaps
@@ -33,7 +58,7 @@ class Trajectory():
         self.kore_inclunding_drift = self.kore
         for i in range(40):
             if actual_cell.shipyard:
-                break
+                self.leads_to_shipyard = True
 
             actual_cell = actual_cell.neighbor(self.instructions[-1].to_point())
             self.kore_inclunding_drift += actual_cell.kore
@@ -41,44 +66,19 @@ class Trajectory():
     def __repr__(self) -> str:
         return f"{self.instructions}"
 
+
 class Map():
     def __init__(self, board: Board):
         self.map_cells: Dict[Point, Cell] = board.cells
         pass
-
-    def list_available_route(self, origin_cell, len_action, last_direction=None, last_trajectory=None) -> List[Trajectory]:
-        '''Get all routes with following constraints:
-                - Beginning and ending are located at a cluster
-                - Number of turns are lower or equal than len_action
-        '''
-        # TODO: len action compute taking into acount that len action are changes in direction
-        # can same direction indefinitely until shipyard
-        trajectories = []
-
-        if len_action:
-            for dir in Direction.list_directions():
-                new_traj = Trajectory(origin_cell)
-                new_traj.add_from(last_trajectory)
-                new_traj.add(dir)
-                trajectories.extend(self.list_available_route(origin_cell, len_action - 1, last_direction=dir, last_trajectory=new_traj))
-        
-        else:
-            # replay trajectory
-            actual_cell = origin_cell
-            for _dir in last_trajectory.instructions:
-                actual_cell = actual_cell.neighbor(_dir.to_point())
-
-            for i in range(40):
-                if actual_cell.shipyard:
-                    trajectories.append(last_trajectory)
-                    break
-                
-                actual_cell = actual_cell.neighbor(last_direction.to_point())
-        
-        return trajectories
     
-    def convert_flight_plan_to_trajectories(self, flight_plans: List[str]):
-        pass
+    def convert_flight_plan_to_trajectories(self, origin_cell: Cell, flight_plans: List[str]):
+        trajectories = []
+        for flight_plan in flight_plans:
+            traj = Trajectory(origin_cell)
+            traj.set_flight_plan(flight_plan)
+            trajectories.append(traj)
+        return trajectories
 
 
 direction_re = '[NSWE]'
@@ -88,10 +88,7 @@ def get_all_flight_plans_under_length(length: int) -> List[str]:
     def _is_flight_plan_conform(plan: str) -> bool:
         # Finishing by direction
         # Quantifier always followed by direction
-        match = re.search(r'^({quantifier}?{direction}+)+$'.format(
-            quantifier=quantifier_re,
-            direction=direction_re
-        ), plan)
+        match = re.search(r'^({quantifier}?{direction}+)+$'.format(quantifier=quantifier_re, direction=direction_re), plan)
         return bool(match)
 
     alphabet = 'NSWE0123456789'
