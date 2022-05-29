@@ -16,10 +16,6 @@ class Trajectory():
         self.finish_in_shipyard = None
         self.leads_to_shipyard = None
 
-    def add_from(self, last_traj):
-        if last_traj:
-            self.instructions.extend(deepcopy(last_traj.instructions))
-
     def add(self, dir: Direction):
         self.instructions.append(dir)
     

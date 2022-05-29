@@ -15,7 +15,7 @@ def agent(obs, config):
     spawn_cost = board.configuration.spawn_cost
     kore_left = me.kore
 
-    paths = get_all_flight_plans_under_length(7)
+    paths = get_all_flight_plans_under_length(4)
     trajectories = map.convert_flight_plan_to_trajectories(me.shipyards[0].cell, paths)
     for trajectory in trajectories:
         trajectory.evaluate()
