@@ -94,7 +94,8 @@ def get_all_flight_plans_under_length(length: int) -> List[str]:
         match = re.search(r'^({quantifier}?{direction}+)+$'.format(quantifier=quantifier_re, direction=direction_re), plan)
         match2 = re.search(r'{direction}{direction}$'.format(direction=direction_re), plan)  # limit end  N15E == NE
         match3 = re.search(r'(NN|WW|EE|SS)', plan)
-        return bool(match) and bool(match2) and not bool(match3)
+        match4 = re.search(r'^{direction}'.format(direction=direction_re), plan)
+        return bool(match) and bool(match2) and not bool(match3) and bool(match4)
 
     alphabet = 'NSWE0123456789'
     all_path = []
