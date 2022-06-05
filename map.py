@@ -15,13 +15,13 @@ class Map():
         self.map_cells: Dict[Point, Cell] = board.cells
         pass
     
-    def convert_flight_plan_to_trajectories(self, origin_cell: Cell, flight_plans: List[str], turn: int):
-        trajectories = []
-        for flight_plan in flight_plans:
-            traj = Trajectory(origin_cell)
-            traj.set_flight_plan(flight_plan, turn)
-            trajectories.append(traj)
-        return trajectories
+    # def convert_flight_plan_to_trajectories(self, origin_cell: Cell, flight_plans: List[str], turn: int):
+    #     trajectories = []
+    #     for flight_plan in flight_plans:
+    #         traj = Trajectory(origin_cell)
+    #         traj.set_flight_plan(flight_plan, turn)
+    #         trajectories.append(traj)
+    #     return trajectories
 
 
 direction_re = '[NSWE]'
