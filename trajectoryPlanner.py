@@ -16,7 +16,7 @@ class CollisionAndComeBackRoute():  # TODO: Merge with trajectory
         self.total_mission_time = time_elapsed +  2 * distance_to_drifter  # Assuming for now that withdrawer only get one ship
         
         # collection spec
-        self.minimum_ship_number = fleet.ship_count + 1
+        self.minimum_ship_number = fleet.ship_count + 1 # TODO: count using TrajPlanner
         self.drifter_kore = fleet.kore
 
         # TODO: Filter by role
@@ -59,7 +59,6 @@ class TrajectoryPlanner():
             self.registered_fleet[fleet.id] = fleet
         
         fleet = self.registered_fleet[fleet.id]
-        window = min(15, 400 - turn) # max turns 
         for step, point in enumerate(fleet.trajectory.points):
             if turn + step >= 400:
                 continue
@@ -67,17 +66,17 @@ class TrajectoryPlanner():
             if not len(space):
                 self.fleet_planner[turn + step][point].append(fleet.id)
             else:
-                # collision
+                # Collision
                 _, fleet_to_remove_id = combine_fleets(self.registered_fleet[space[0]], fleet)
                 # TODO: 
-                    # resolve any allied fleets that ended up in the same square DONE
+                    # Resolve any allied fleets that ended up in the same square DONE
                     # Check for fleet to fleet collisions (ennemy)
                     # Check for fleet to shipyard collisions
                 self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
 
     def remove_trajectory(self, fleet: CustomFleet, starting_from_turn: int) -> None:
         trajectory = fleet.trajectory
-        steps_to_remove = starting_from_turn - trajectory.started_at_turn
+        steps_to_remove = starting_from_turn - trajectory.trajectory_info.started_at_turn
         points = []
         for step, point in enumerate(trajectory.points):
             turn = starting_from_turn + step
@@ -86,7 +85,7 @@ class TrajectoryPlanner():
                 points.append(point)
 
             else:
-                fleet.trajectory.finished_at_turn = turn if not fleet.trajectory.finished_at_turn else fleet.trajectory.finished_at_turn
+                fleet.trajectory.trajectory_info.finished_at_turn = turn if not fleet.trajectory.trajectory_info.finished_at_turn else fleet.trajectory.trajectory_info.finished_at_turn
                 # remove all traces
                 if turn >= 400:
                     continue
@@ -99,13 +98,13 @@ class TrajectoryPlanner():
     def get_drifter_interception_routes(self, from_cell: Cell, turn: int, drifter_id: int) -> List[CollisionAndComeBackRoute]:
         '''only launch when perigee'''
         routes = []
+        fleet = self.registered_fleet[drifter_id]
         for time_elapsed, screenshot in enumerate(list(self.fleet_planner.values())[turn: turn + 15]):  # Compute all possible routes from now to 15 turn ahead
             for target, fleet_ids in screenshot.items():
                 # Check the feasibility of launching a withdrawer to this pos
                 # add followind direction after path has been completed
-                if drifter_id in fleet_ids and target.distance_to(from_cell.position, 21) <= time_elapsed:  # withdrawer has enough time to get to drifter
+                if drifter_id in fleet_ids and target.distance_to(from_cell.position, 21) <= time_elapsed and fleet.trajectory.trajectory_info.is_drifting:  # withdrawer has enough time to get to drifter
                     # if drifter_id not in fleet_ids:
-                    fleet = self.registered_fleet[drifter_id]
                     route = CollisionAndComeBackRoute(
                         fleet=fleet,
                         time_elapsed=time_elapsed,
