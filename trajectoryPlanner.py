@@ -28,15 +28,8 @@ class CollisionAndComeBackRoute():  # TODO: Merge with trajectory
     def compute_flight_plan(self, round_trip: bool=False) -> str:
         vector = self.target_point - self.origin_point
         components = abs(vector)
-        if vector.x < 0:
-            _x = 'W'
-        else:
-            _x = 'E'
-
-        if vector.y < 0:
-            _y = 'S'
-        else:
-            _y = 'N'
+        _x = 'W' if vector.x < 0 else 'E'
+        _y = 'S' if vector.y < 0 else 'N'
 
         xc = components.x if components.x <= 1 else components.x - 1  # "N5E" go north > 5E go north > 4E ...
         yc = components.y if components.y <= 1 else components.y - 1
@@ -57,21 +50,6 @@ class TrajectoryPlanner():
             self.fleet_planner[turn] = {point: [] for point in map_points}
 
         self.fleet_handled = set()
-
-    # def diagnostic_trajectory(self, trajectory : Trajectory, turn: int, map_fleets: Dict[str, CustomFleet]) -> None:
-    #     '''Test trajectory inplace'''
-    #     traj_infos = trajectory.trajectory_info
-    #     for step, point in enumerate(trajectory.points):
-    #         met_fleets_ids = self.fleet_planner[turn + step][point]
-    #         if len(met_fleets_ids) > 0:
-    #             traj_infos.is_intercepted = True
-    #             traj_infos.is_intercepted_by_withrdrawer = True if traj_infos.is_intercepted_by_withrdrawer else any([map_fleets[fleet_id].role == 'withdrawer' for fleet_id in met_fleets_ids])
-    #             return
-        
-    #     traj_infos.is_intercepted = False
-    #     traj_infos.is_intercepted_by_withrdrawer = False
-    #     traj_infos.is_drifting = True
-    #     return
 
     def add_trajectory(self, turn: int, fleet: CustomFleet) -> None:
         # traj_infos = fleet.trajectory.trajectory_info
@@ -131,7 +109,7 @@ class TrajectoryPlanner():
                     route = CollisionAndComeBackRoute(
                         fleet=fleet,
                         time_elapsed=time_elapsed,
-                        distance_to_drifter=target.distance_to(from_cell.position, 21), # TODO: get boardconfiguration size as distance
+                        distance_to_drifter=target.distance_to(from_cell.position, 21), # TODO: get board configuration size as distance
                         turn=turn,
                         origin_point=from_cell.position,
                         target_point=target

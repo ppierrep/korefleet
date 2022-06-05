@@ -85,46 +85,6 @@ class Trajectory():
             self.kore_inclunding_drift += actual_cell.kore
 
 
-# def compress(expanded_flight_plan: str) -> str:
-#     '''
-#         Compress an expanded flight plan (EEEEENSS) into a compact one (5EN2S) while maintaining the order.
-#     '''
-#     res = ''
-#     cursor = ''
-#     counter = 1
-#     for s in expanded_flight_plan:
-#         if not cursor:
-#             cursor = s
-#             continue
-#         if s == cursor:
-#             counter += 1
-#         else:
-#             res += f'{counter}{cursor}'
-#             cursor = s
-#             counter = 1
-
-#     res += f'{counter}{cursor}'
-#     res = re.sub(r'(?<!\d)(1)(?=[NSWE])', '', res)
-#     return res
-
-
-# def compress(expanded_flight_plan: str, compress_last: bool=False) -> str:
-#     '''
-#         Compress an expanded flight plan (EEEEENSS) into a compact one (E4ENS) while maintaining the order.
-#         Examples:
-#             EEEEENSS -> E4ENS
-#             NEEENNNEEE -> N3E3NE
-#     '''
-#     # TODO: allow path factorization : NEEENNNEEE -> N6EN or N3NE instead of N3E3NE
-#     path = expanded_flight_plan[0]
-#     _groupby = [(char, len(list(g))) for char, g in groupby(expanded_flight_plan[1:])]
-#     for str_dir, length in _groupby:
-#         path += str(length) + str_dir if length > 1 else str_dir
-    
-#     # if last elem is 3E, remove quantifier to save space
-#     return re.sub(r'(\d{1,2})(?=[NSWE]$)', '', path) if compress_last else path
-
-
 def compress(expanded_flight_plan: str, compress_last: bool=False) -> str:
     '''
         Compress an expanded flight plan (EEEEENSS) into a compact one (E4ENS) while maintaining the order.

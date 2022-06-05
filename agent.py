@@ -43,7 +43,7 @@ def agent(obs, config):
         trajPlanner.fleet_handled.remove(ship_id)
 
     if len(schedule_next_action):
-        # only works with one shipyard for the turn
+        # Only works with one shipyard for the turn
         next_action = schedule_next_action[-1]
         shipyID = next_action['shipyardID']
         shipyAction = next_action['action']
@@ -79,7 +79,6 @@ def agent(obs, config):
 
             # build a withdrawer
             elif len(trajPlanner.fleet_handled) == 2:
-                # TODO: get a ship that will fetch drifters 
                 routes = []
                 for fleetID in list(trajPlanner.fleet_handled):
                     routes.extend(trajPlanner.get_drifter_interception_routes(turn=turn, drifter_id=fleetID, from_cell=me.shipyards[0].cell))  # TODO: check if target other withdrawer
