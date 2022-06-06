@@ -73,6 +73,21 @@ def agent(obs, config):
                 _routes.pop()
                 shipyard.next_action = action
 
+            # Always try to make ships (multiple of 3 (3 ships): N2S, 5 (8 ships): N3EWS), 21 (N3W6E6S)
+            # Compute better reward for each combinaison (with % mined and regeneration taken into account)(deactivate withdrawer)
+            # 
+            # Add Multiple shipyard handling:
+            #   - In between high value stars
+            #   - Start at one finish at one
+            #   - Transfer ships to keep ships count averaged
+            #
+            # Create a miner baseline rule based IA
+            #
+            # Use logic of withdrawer to compute routes to attack this IA.
+            #
+            #
+
+
             # TODO: Check if only one ship get spawn per turn
             #   - can be troublesome with mutliple shipyard
             #   - can be troublesome with ennemy spawn
@@ -84,8 +99,8 @@ def agent(obs, config):
                     routes.extend(trajPlanner.get_drifter_interception_routes(turn=turn, drifter_id=fleetID, from_cell=me.shipyards[0].cell))  # TODO: check if target other withdrawer
                     
                 # Sort by mission time
+                # TODO: Avoid being intercepted
                 routes = list(sorted([r for r in routes if len(r.round_trip_path)], key=lambda x: len(x.round_trip_path)))
-                # if(len(routes) and len(routes[0].round_trip_path)):
                 if(len(routes)):
                     number_of_fleet = max(get_min_ship(routes[0].round_trip_path), routes[0].minimum_ship_number) # max of either min required size for length or min required size to intercept
                     schedule_next_action.append({

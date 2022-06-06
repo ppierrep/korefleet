@@ -74,6 +74,20 @@ class TrajectoryPlanner():
                     # Check for fleet to shipyard collisions
                 self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
 
+    # def is_trajectory_intercepted(self, starting_turn: int, points: List[Point]) -> None:     
+    #     for step, point in enumerate(points):
+    #         if starting_turn + step >= 400:
+    #             continue
+    #         space = self.fleet_planner[starting_turn + step][point]
+    #         if not len(space):
+    #             continue
+    #         else:
+    #             # Collision
+    #             # self.registered_fleet
+    #             # TODO: 
+    #                 # REturn collision with whom fleet, how, when and potential results
+    #             self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
+
     def remove_trajectory(self, fleet: CustomFleet, starting_from_turn: int) -> None:
         trajectory = fleet.trajectory
         steps_to_remove = starting_from_turn - trajectory.trajectory_info.started_at_turn
