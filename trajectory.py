@@ -32,8 +32,10 @@ class Trajectory():
     def add_cell_route(self, cell: Cell) -> None:
         self.points.append(cell.position)
     
-    def set_flight_plan(self, fleet, turn: int) -> None:
-        flight_plan = fleet.flight_plan if len(fleet.flight_plan) else fleet.direction.to_char()
+    def set_flight_plan(self, turn: int, fleet=None, flight_plan=None) -> None:
+        if fleet:
+            flight_plan = fleet.flight_plan if len(fleet.flight_plan) else fleet.direction.to_char()
+
         self.trajectory_info.started_at_turn = turn
         self.flight_plan = flight_plan
         actual_cell = self.origin_cell
@@ -41,6 +43,7 @@ class Trajectory():
 
         real_plan = ''  # if encountering shipyard, crop plan
         instructions_chunks = re.findall(r'([NSWE]|^)(\d{0,2})?', flight_plan)
+        i = 0
         for instruction, nb_repeat in instructions_chunks:
             nb_repeat = 1 if not nb_repeat else nb_repeat  # '' handling
             for i in range(int(nb_repeat)):
@@ -55,17 +58,21 @@ class Trajectory():
 
                 if actual_cell.shipyard:
                     self.trajectory_info.finish_in_shipyard = True
+                    self.trajectory_info.finished_at_turn = turn + i
                     break
+                i += 1
         
         # Compute all drifting trajectory
         for i in range(400 - turn - len(self.points)):
             if actual_cell.shipyard:
                 self.trajectory_info.drift_to_shipyard = True
+                self.trajectory_info.finished_at_turn = turn + len(self.points) + i
                 break
 
             last_dir = Direction.from_char(instruction)
             actual_cell = actual_cell.neighbor(last_dir.to_point())
             self.add_cell_route(actual_cell)
+            i += 1
 
         if not(self.trajectory_info.drift_to_shipyard or self.trajectory_info.finish_in_shipyard):
             self.trajectory_info.is_drifting = True

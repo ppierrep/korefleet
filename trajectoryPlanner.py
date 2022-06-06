@@ -2,9 +2,12 @@ from collections import defaultdict
 from tracemalloc import start
 from typing import *
 from xml.etree.ElementTree import PI
+import math
 
-from kaggle_environments.envs.kore_fleets.helpers import Point, Cell, Direction
+from kaggle_environments.envs.kore_fleets.helpers import Point, Cell, Direction, Board
 from fleet import CustomFleet
+from map import Map
+from utils import collection_rate_for_ship_count, get_min_ship
 
 from trajectory import Trajectory, TrajectoryInfo, compress
 
@@ -43,19 +46,22 @@ class CollisionAndComeBackRoute():  # TODO: Merge with trajectory
 
 
 class TrajectoryPlanner():
-    def __init__(self, total_turns: int, map_points: List[Point]) -> None:
+    def __init__(self, total_turns: int, map_points: List[Point], _map: Board) -> None:
         self.fleet_planner = {}
         self.registered_fleet = {}
+        self.kore_planner = {}
         for turn in range(total_turns):
             self.fleet_planner[turn] = {point: [] for point in map_points}
+            self.kore_planner[turn] = {point: 0 for point in map_points}
 
         self.fleet_handled = set()
+        self.map = _map
 
     def add_trajectory(self, turn: int, fleet: CustomFleet) -> None:
         # traj_infos = fleet.trajectory.trajectory_info
         if fleet.id not in self.registered_fleet:
             fleet = CustomFleet.convert(fleet, role='')
-            fleet.trajectory.set_flight_plan(fleet, turn)
+            fleet.trajectory.set_flight_plan(fleet=fleet, turn=turn)
             self.registered_fleet[fleet.id] = fleet
         
         fleet = self.registered_fleet[fleet.id]
@@ -63,9 +69,9 @@ class TrajectoryPlanner():
             if turn + step >= 400:
                 continue
             space = self.fleet_planner[turn + step][point]
-            if not len(space):
+            if not len(space) and not self.map.cells[point].shipyard:
                 self.fleet_planner[turn + step][point].append(fleet.id)
-            else:
+            elif len(space):
                 # Collision
                 _, fleet_to_remove_id = combine_fleets(self.registered_fleet[space[0]], fleet)
                 # TODO: 
@@ -73,6 +79,33 @@ class TrajectoryPlanner():
                     # Check for fleet to fleet collisions (ennemy)
                     # Check for fleet to shipyard collisions
                 self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
+            else:  # in shipyard
+                pass
+
+    def update_kore(self, board, turn) -> None:
+        # TODO: Add ship destroyed kore
+        map = board.cells
+        next_steps = range(1, 30)
+        for point, cell in map.items():
+            self.kore_planner[turn][point] = cell.kore
+        
+        for step in next_steps:
+            if turn + step >= 400:
+                continue
+            
+            last_kore_map = self.kore_planner[turn + step - 1]
+            last_fleet_map = self.fleet_planner[turn + step - 1]
+
+            for point, fleets in last_fleet_map.items():
+                consumption = 0
+                if len(fleets):
+                    num_ship = self.registered_fleet[fleets[0]].ship_count
+                    consumption = collection_rate_for_ship_count(num_ship)
+                
+                regeneration = last_kore_map[point] * .02 if last_kore_map[point] < 500 else 0
+                self.kore_planner[turn + step][point] = last_kore_map[point] - consumption + regeneration
+        
+
 
     # def is_trajectory_intercepted(self, starting_turn: int, points: List[Point]) -> None:     
     #     for step, point in enumerate(points):
@@ -131,8 +164,63 @@ class TrajectoryPlanner():
                         routes.append(route)
         return routes
 
+
+    def get_simulations(self, origin_cell: Cell, turn: int, routes: List[int], board: 'Board'):
+        res = []
+        for route in routes:
+            res.append(self.get_simulation(origin_cell, turn, route, board))
+        return res
+
+    def get_simulation(self, origin_cell: Cell, turn: int, route: str, board: 'Board'):
+        # Create placeholder to call set_flight_plan TODO: remove the use of placeholder
+        traj = Trajectory(origin_cell)
+        traj.set_flight_plan(turn=turn, flight_plan=route)  # Highly convoluted
+
+        info = RouteSimulationInfo(route, turn)
+        total_kore = 0
+        mined_kore = 0   # kore does not update
+        for step, point in enumerate(traj.points):
+            if turn + step < 400:
+                space = self.fleet_planner[turn + step][point]
+                kore = self.kore_planner[turn + step][point]
+                total_kore += kore
+                mined_kore += info.min_kore_mining_ratio * kore
+
+                if not len(space):
+                    continue
+                else:
+                    info.intercepted = True
+                    break
         
-# from helper
+        info.flight_plan_time = step
+        info.kore = total_kore
+        info.mined_kore = mined_kore
+
+        info.kore_per_step = total_kore / info.flight_plan_time
+        info.mined_kore_per_step = mined_kore / info.flight_plan_time
+
+        return info
+
+
+class RouteSimulationInfo():
+    def __init__(self, flight_plan: str, turn: int):
+        self.min_fleet = get_min_ship(flight_plan)
+        self.flight_plan = flight_plan
+        self.turn = turn
+        self.min_kore_mining_ratio = collection_rate_for_ship_count(self.min_fleet)
+
+        self.kore = 0
+        self.mined_kore = 0
+        self.kore_per_step = 0
+        self.mined_kore_per_step = 0
+
+        # binary
+        self.intercepted = False
+
+        # events
+        self.flight_plan_time = None
+
+
 def combine_fleets(f1: CustomFleet, f2: CustomFleet) -> Tuple[CustomFleet, CustomFleet]:
     if f1.less_than_other_allied_fleet(f2):
         f1, f2 = f2, f1
