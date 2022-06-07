@@ -45,6 +45,9 @@ class Trajectory():
         instructions_chunks = re.findall(r'([NSWE]|^)(\d{0,2})?', flight_plan)
         i = 0
         for instruction, nb_repeat in instructions_chunks:
+            if instruction == 'C': # TODO: handle ships not having enough kore
+                break
+
             nb_repeat = 1 if not nb_repeat else int(nb_repeat) + 1  # '' handling
             for i in range(nb_repeat):
                 if instruction:
@@ -64,15 +67,16 @@ class Trajectory():
         
         # Compute all drifting trajectory
         for i in range(400 - turn - len(self.points)):
-            if actual_cell.shipyard:
+            if actual_cell.shipyard or instruction == 'C':
                 self.trajectory_info.drift_to_shipyard = True
                 self.trajectory_info.finished_at_turn = turn + len(self.points) + i
                 break
 
             last_dir = Direction.from_char(instruction)
-            actual_cell = actual_cell.neighbor(last_dir.to_point())
-            self.add_cell_route(actual_cell)
-            i += 1
+            if last_dir:
+                actual_cell = actual_cell.neighbor(last_dir.to_point())
+                self.add_cell_route(actual_cell)
+                i += 1
 
         if not(self.trajectory_info.drift_to_shipyard or self.trajectory_info.finish_in_shipyard):
             self.trajectory_info.is_drifting = True

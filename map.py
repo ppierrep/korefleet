@@ -4,6 +4,8 @@ from typing import *
 import re
 
 import networkx as nx
+import numpy as np
+import scipy.signal
 from kaggle_environments.envs.kore_fleets.helpers import Board, Cell, Direction, Point
 
 from trajectory import Trajectory
@@ -13,7 +15,21 @@ from trajectory import Trajectory
 class Map():
     def __init__(self, board: Board):
         self.map_cells: Dict[Point, Cell] = board.cells
-        pass
+        self.player = board.current_player
+
+    def get_map_shipyard_position_candidates(self, distA: int, distB: int):
+        me = self.player
+        # dirty but working
+        ally_shipyard_positions = [s.cell.position for s in me.shipyards]
+        positions = []
+        for point in [point for point in self.map_cells]:
+            # altleast one at minDist/maxDist and all >= mindist 
+            dists = [point.distance_to(spoint, 21) for spoint in ally_shipyard_positions]
+            if all([d >= distA for d in dists]) and any([d <= distB for d in dists]):
+                positions.append(point)
+
+        return positions
+    
     
     # def convert_flight_plan_to_trajectories(self, origin_cell: Cell, flight_plans: List[str], turn: int):
     #     trajectories = []
@@ -160,19 +176,26 @@ def get_all_flight_plans_under_length(length: int) -> List[str]:
     return list(res)
 
 
-# def get_all_flight_plans_under_length(length: int) -> List[str]:
-#     def _is_flight_plan_conform(plan: str) -> bool:
-#         # Finishing by direction
-#         # Quantifier always followed by direction
-#         match = re.search(r'^{direction}({quantifier}?{direction}+)+$'.format(quantifier=quantifier_re, direction=direction_re), plan)
-#         match2 = re.search(r'{direction}{direction}$'.format(direction=direction_re), plan)  # limit end  N15E == NE
-#         match3 = re.search(r'(NN|WW|EE|SS)', plan)
-#         return bool(match) and bool(match2) and not bool(match3)
+def gkern(l=5, sig=1.):
+    """
+    creates gaussian kernel with side length `l` and a sigma of `sig`
+    central value must be zeroed, quick and dirty -> odd value for length 
+    """
+    ax = np.linspace(-(l - 1) / 2., (l - 1) / 2., l)
+    gauss = np.exp(-0.5 * np.square(ax) / np.square(sig))
+    gauss[int(len(gauss) / 2)] = 0
+    kernel = np.outer(gauss, gauss)
+    return kernel / np.sum(kernel)
 
-#     alphabet = 'NSWE0123456789'
-#     all_path = []
-#     for i in range(1, length + 1):
-#         _paths = [''.join(path) for path in product(alphabet, repeat=i)]
-#         _valid_paths = [path for path in _paths if _is_flight_plan_conform(path)]
-#         all_path.extend(_valid_paths)
-#     return all_path
+def get_map_kore_convolutions(board, length):
+    map_infos = {
+        "pos": [(pos.x, pos.y) for pos in board.cells.keys()],
+        "kore": [cell.kore for cell in board.cells.values()],
+        "shipyard": [bool(cell.shipyard) for cell in board.cells.values()]
+    }
+
+    arr = np.zeros((21, 21))
+    for pos, kore, shipyard in zip(map_infos['pos'], map_infos['kore'], map_infos['shipyard']):
+        arr[pos] = kore if not shipyard else 0 
+    return scipy.signal.convolve2d(arr, gkern(l=length, sig=1.), boundary='wrap')
+        

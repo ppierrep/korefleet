@@ -27,23 +27,7 @@ class CollisionAndComeBackRoute():  # TODO: Merge with trajectory
         self.target = fleet
         self.origin_point = origin_point
         self.target_point = target_point
-        self.round_trip_path = self.compute_flight_plan(round_trip=True)
-
-    def compute_flight_plan(self, round_trip: bool=False) -> str:
-        vector = self.target_point - self.origin_point
-        components = abs(vector)
-        _x = 'W' if vector.x < 0 else 'E'
-        _y = 'S' if vector.y < 0 else 'N'
-
-        xc = components.x if components.x <= 1 else components.x - 1  # "N5E" go north > 5E go north > 4E ...
-        yc = components.y if components.y <= 1 else components.y - 1
-
-        if not round_trip:
-            return compress(''.join([_x * xc] + [_y * yc]), compress_last=True)  # first deplacement is always free
-        else:
-            one_way = ''.join([_x * xc] + [_y * yc])
-            round_trip = ''.join(reversed([Direction.from_char(char).opposite().to_char() for char in one_way]))
-            return compress(one_way + round_trip, compress_last=True)
+        self.round_trip_path = compute_flight_plan(self.origin_point, self.target_point, round_trip=True)
 
 
 class TrajectoryPlanner():
@@ -105,22 +89,6 @@ class TrajectoryPlanner():
                 
                 regeneration = last_kore_map[point] * .02 if last_kore_map[point] < 500 else 0
                 self.kore_planner[turn + step][point] = last_kore_map[point] - consumption + regeneration
-        
-
-
-    # def is_trajectory_intercepted(self, starting_turn: int, points: List[Point]) -> None:     
-    #     for step, point in enumerate(points):
-    #         if starting_turn + step >= 400:
-    #             continue
-    #         space = self.fleet_planner[starting_turn + step][point]
-    #         if not len(space):
-    #             continue
-    #         else:
-    #             # Collision
-    #             # self.registered_fleet
-    #             # TODO: 
-    #                 # REturn collision with whom fleet, how, when and potential results
-    #             self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
 
     def remove_trajectory(self, fleet: CustomFleet, starting_from_turn: int) -> None:
         trajectory = fleet.trajectory
@@ -188,6 +156,9 @@ class TrajectoryPlanner():
                 kore = self.kore_planner[turn + step][point] * (1 - already_mined[point] * info.min_kore_mining_ratio)
                 total_kore += kore
                 mined_kore += info.min_kore_mining_ratio * kore
+                dist = point.distance_to(traj.origin_cell.position, size=21)
+                if dist > info.max_dist:
+                    info.max_dist = dist
 
                 already_mined[point] +=1
                 if kore == 0:
@@ -203,7 +174,7 @@ class TrajectoryPlanner():
         places_visited = Counter(places_visited)
         info.same_trajectory_count = sum(places_visited.values()) - len(places_visited.values())  # number of time we are on the same tile twice
 
-        info.flight_plan_time = step
+        info.flight_plan_time = step + 1
         info.kore = total_kore
         info.mined_kore = mined_kore
 
@@ -218,6 +189,7 @@ class TrajectoryPlanner():
 class RouteSimulationInfo():
     def __init__(self, flight_plan: str, turn: int):
         self.min_fleet = get_min_ship(flight_plan)
+        self.max_dist = 0
         self.flight_plan = flight_plan
         self.turn = turn
         self.min_kore_mining_ratio = collection_rate_for_ship_count(self.min_fleet)
@@ -245,3 +217,20 @@ def combine_fleets(f1: CustomFleet, f2: CustomFleet) -> Tuple[CustomFleet, Custo
     f1._ship_count += f2._ship_count
 
     return f1.id, f2.id
+
+
+def compute_flight_plan(origin_point, target_point, round_trip: bool=False, compress_last: bool=True) -> str:
+    vector = target_point - origin_point
+    components = abs(vector)
+    _x = 'W' if vector.x < 0 else 'E'
+    _y = 'S' if vector.y < 0 else 'N'
+
+    xc = components.x if components.x <= 1 else components.x - 1  # "N5E" go north > 5E go north > 4E ...
+    yc = components.y if components.y <= 1 else components.y - 1
+
+    if not round_trip:
+        return compress(''.join([_x * xc] + [_y * yc]), compress_last=compress_last)  # first deplacement is always free
+    else:
+        one_way = ''.join([_x * xc] + [_y * yc])
+        round_trip = ''.join(reversed([Direction.from_char(char).opposite().to_char() for char in one_way]))
+        return compress(one_way + round_trip, compress_last=compress_last)
