@@ -3,20 +3,18 @@ from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction
 from map import Map, get_all_flight_plans_under_length
 from trajectoryPlanner import TrajectoryPlanner, CollisionAndComeBackRoute
 from utils import get_min_ship
-import debugpy
+# import debugpy
 
-debugpy.listen(5678)
-print("Waiting for debugger attach")
-debugpy.wait_for_client()
+# debugpy.listen(5678)
+# print("Waiting for debugger attach")
+# debugpy.wait_for_client()
 
 trajPlanner = None
-_routes = ['N3W', 'S3W', 'E3N', 'S', 'N2W', 'S2E', 'N3W', 'S3W']
 schedule_next_action = []
 
 def agent(obs, config):
     global trajPlanner
     global schedule_next_action
-    global _routes
 
     board = Board(obs, config)
 
@@ -68,7 +66,7 @@ def agent(obs, config):
                 routes = get_all_flight_plans_under_length(7)
                 travel_simulations = trajPlanner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes, board=board)
                 selected_route = list(sorted([el for el in travel_simulations if not el.intercepted], key=lambda x: x.mined_kore_per_step, reverse=True))[0]
-                print({'fp': selected_route.flight_plan, 'ks': selected_route.mined_kore_per_step, 'turn': selected_route.turn})
+                # print({'fp': selected_route.flight_plan, 'ks': selected_route.mined_kore_per_step, 'turn': selected_route.turn})
                 action = ShipyardAction.launch_fleet_with_flight_plan(selected_route.min_fleet, selected_route.flight_plan)
                 shipyard.next_action = action
 

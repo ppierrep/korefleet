@@ -179,18 +179,21 @@ class TrajectoryPlanner():
         info = RouteSimulationInfo(route, turn)
         total_kore = 0
         mined_kore = 0   # kore does not update
+        already_mined = defaultdict(int)
         for step, point in enumerate(traj.points):
             if turn + step < 400:
                 space = self.fleet_planner[turn + step][point]
-                kore = self.kore_planner[turn + step][point]
+                kore = self.kore_planner[turn + step][point] * (1 - already_mined[point] * info.min_kore_mining_ratio)
                 total_kore += kore
                 mined_kore += info.min_kore_mining_ratio * kore
 
+                already_mined[point] +=1
                 if not len(space):
                     continue
                 else:
                     info.intercepted = True
                     break
+                
         
         info.flight_plan_time = step
         info.kore = total_kore
