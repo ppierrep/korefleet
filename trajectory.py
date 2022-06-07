@@ -45,8 +45,8 @@ class Trajectory():
         instructions_chunks = re.findall(r'([NSWE]|^)(\d{0,2})?', flight_plan)
         i = 0
         for instruction, nb_repeat in instructions_chunks:
-            nb_repeat = 1 if not nb_repeat else nb_repeat  # '' handling
-            for i in range(int(nb_repeat)):
+            nb_repeat = 1 if not nb_repeat else int(nb_repeat) + 1  # '' handling
+            for i in range(nb_repeat):
                 if instruction:
                     dir = Direction.from_char(instruction)
                 else:

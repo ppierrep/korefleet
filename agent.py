@@ -65,14 +65,18 @@ def agent(obs, config):
             if shipyard.ship_count >= 21 and len(trajPlanner.fleet_handled) < 5:
                 routes = get_all_flight_plans_under_length(7)
                 travel_simulations = trajPlanner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes, board=board)
-                selected_route = list(sorted([el for el in travel_simulations if not el.intercepted], key=lambda x: x.mined_kore_per_step, reverse=True))[0]
-                # print({'fp': selected_route.flight_plan, 'ks': selected_route.mined_kore_per_step, 'turn': selected_route.turn})
+
+                high_kore_routes = list(sorted([el for el in travel_simulations if not el.intercepted], key=lambda x: x.mined_kore_per_step, reverse=True))[0:10]
+                low_wasted_routes = list(sorted([el for el in high_kore_routes], key=lambda x: x.empty_cells_ratio, reverse=False))[0:5]
+                selected_route = list(sorted([el for el in low_wasted_routes], key=lambda x: x.same_trajectory_count, reverse=False))[0]
+
+                # print({'fp': low_wasted_routes[0].flight_plan, 'waste': low_wasted_routes[0].empty_cells_ratio, 'turn': low_wasted_routes[0].turn})
                 action = ShipyardAction.launch_fleet_with_flight_plan(selected_route.min_fleet, selected_route.flight_plan)
                 shipyard.next_action = action
 
             # Always try to make ships (multiple of 3 (3 ships): N2S, 5 (8 ships): N3EWS), 21 (N3W6E6S)
-            # ------------------------------------------
             # Compute better reward for each combinaison (with % mined and regeneration taken into account)(deactivate withdrawer)
+            # ------------------------------------------
             # 
             # Add Multiple shipyard handling:
             #   - In between high value stars

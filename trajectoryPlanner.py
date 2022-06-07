@@ -5,6 +5,7 @@ from xml.etree.ElementTree import PI
 import math
 
 from kaggle_environments.envs.kore_fleets.helpers import Point, Cell, Direction, Board
+from numpy import place
 from fleet import CustomFleet
 from map import Map
 from utils import collection_rate_for_ship_count, get_min_ship
@@ -179,6 +180,7 @@ class TrajectoryPlanner():
         info = RouteSimulationInfo(route, turn)
         total_kore = 0
         mined_kore = 0   # kore does not update
+        empty_cells = 0
         already_mined = defaultdict(int)
         for step, point in enumerate(traj.points):
             if turn + step < 400:
@@ -188,17 +190,25 @@ class TrajectoryPlanner():
                 mined_kore += info.min_kore_mining_ratio * kore
 
                 already_mined[point] +=1
+                if kore == 0:
+                    empty_cells += 1
                 if not len(space):
                     continue
                 else:
                     info.intercepted = True
                     break
-                
-        
+
+        window = [self.fleet_planner[el] for el in range(turn, turn + step) if turn + step < 400]
+        places_visited = [point for win in window for point in set(traj.points) if len(win[point]) > 0]
+        places_visited = Counter(places_visited)
+        info.same_trajectory_count = sum(places_visited.values()) - len(places_visited.values())  # number of time we are on the same tile twice
+
         info.flight_plan_time = step
         info.kore = total_kore
         info.mined_kore = mined_kore
 
+        info.empty_cells = empty_cells
+        info.empty_cells_ratio = empty_cells / info.flight_plan_time
         info.kore_per_step = total_kore / info.flight_plan_time
         info.mined_kore_per_step = mined_kore / info.flight_plan_time
 
@@ -213,6 +223,8 @@ class RouteSimulationInfo():
         self.min_kore_mining_ratio = collection_rate_for_ship_count(self.min_fleet)
 
         self.kore = 0
+        self.empty_cells = 0
+        self.empty_cells_ratio = 0
         self.mined_kore = 0
         self.kore_per_step = 0
         self.mined_kore_per_step = 0
@@ -222,6 +234,8 @@ class RouteSimulationInfo():
 
         # events
         self.flight_plan_time = None
+
+        self.same_trajectory_count = 0
 
 
 def combine_fleets(f1: CustomFleet, f2: CustomFleet) -> Tuple[CustomFleet, CustomFleet]:
