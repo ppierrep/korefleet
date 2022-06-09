@@ -29,12 +29,11 @@ def get_shipyard_scaling(num_ships):
 trajPlanner = None
 schedule_next_action = []
 
-def agent(obs, config):
+def baseline(obs, config):
     global trajPlanner
     global schedule_next_action
 
     board = Board(obs, config)
-
     map = Map(board)
 
     me=board.current_player
@@ -55,22 +54,13 @@ def agent(obs, config):
     
     trajPlanner.map = board # update map
     trajPlanner.update_kore(board, turn)
-
-    # import pickle
-    # with open("board", "wb") as f:
-    #     pickle.dump(
-    #         {
-    #             "pos": [(pos.x, pos.y) for pos in board.cells.keys()],
-    #             "kore": [cell.kore for cell in board.cells.values()],
-    #             "shipyard": [bool(cell.shipyard) for cell in board.cells.values()]
-    #         }
-    #     , f)
-    
-    # raise Exception
     
     decommisionned_ship = set(trajPlanner.fleet_handled) - set(board.fleets.keys())
     for ship_id in decommisionned_ship:
         trajPlanner.fleet_handled.remove(ship_id)
+
+
+    ennemy_combat = trajPlanner.get_ennemy_combat_info(me)
 
     # if len(schedule_next_action):
     #     # Only works with one shipyard for the turn
@@ -93,7 +83,6 @@ def agent(obs, config):
 
             # Always try to make ships (multiple of 3 (3 ships): N2S, 5 (8 ships): N3EWS), 21 (N3W6E6S)
             # Compute better reward for each combinaison (with % mined and regeneration taken into account)(deactivate withdrawer)
-            # ------------------------------------------
             # 
             # Add Multiple shipyard handling:
             #   - In between high value stars
@@ -102,6 +91,7 @@ def agent(obs, config):
             #
             # Create a miner baseline rule based IA
             #
+            # ------------------------------------------
             # Use logic of withdrawer to compute routes to attack this IA.
             #
             if len(me.shipyard_ids) < get_shipyard_scaling(sum([f.ship_count for f in  me.fleets])) and shipyard.ship_count >= 75: # TODO: Get smarter unified metrics to scale shipyard production
@@ -136,8 +126,6 @@ def agent(obs, config):
                 else:
                     shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left / 10)))
 
-            #
-
             # TODO: Check if only one ship get spawn per turn
             #   - can be troublesome with mutliple shipyard
             #   - can be troublesome with ennemy spawn
@@ -166,3 +154,4 @@ def agent(obs, config):
                 pass
 
     return me.next_actions
+

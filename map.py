@@ -43,23 +43,6 @@ class Map():
 direction_re = '[NSWE]'
 quantifier_re = '([1-9]|1[0-9]|2[10])'  # limit to 21+
 
-# def get_all_flight_plans_under_length(length: int) -> List[str]:
-#     def _is_flight_plan_conform(plan: str) -> bool:
-#         # Finishing by direction
-#         # Quantifier always followed by direction
-#         match = re.search(r'^{direction}({quantifier}?{direction}+)+$'.format(quantifier=quantifier_re, direction=direction_re), plan)
-#         match2 = re.search(r'{direction}{direction}$'.format(direction=direction_re), plan)  # limit end  N15E == NE
-#         match3 = re.search(r'(NN|WW|EE|SS)', plan)
-#         return bool(match) and bool(match2) and not bool(match3)
-
-#     alphabet = 'NSWE0123456789'
-#     all_path = []
-#     for i in range(1, length + 1):
-#         _paths = [''.join(path) for path in product(alphabet, repeat=i)]
-#         _valid_paths = [path for path in _paths if _is_flight_plan_conform(path)]
-#         all_path.extend(_valid_paths)
-#     return all_path
-
 def generate_length_3_pos() -> List[str]:
     '''
         Generate flight plan, allowing vessels to comeback to base. 

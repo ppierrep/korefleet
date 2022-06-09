@@ -51,21 +51,25 @@ class TrajectoryPlanner():
         
         fleet = self.registered_fleet[fleet.id]
         for step, point in enumerate(fleet.trajectory.points):
-            if turn + step >= 400:
-                continue
-            space = self.fleet_planner[turn + step][point]
-            if not len(space) and not self.map.cells[point].shipyard:
-                self.fleet_planner[turn + step][point].append(fleet.id)
-            elif len(space):
-                # Collision
-                _, fleet_to_remove_id = combine_fleets(self.registered_fleet[space[0]], fleet)
-                # TODO: 
-                    # Resolve any allied fleets that ended up in the same square DONE
-                    # Check for fleet to fleet collisions (ennemy)
-                    # Check for fleet to shipyard collisions
-                self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
-            else:  # in shipyard
-                pass
+            if turn + step < 400:
+                space = self.fleet_planner[turn + step][point]
+                if not len(space) and not self.map.cells[point].shipyard:
+                    self.fleet_planner[turn + step][point].append(fleet.id)
+                elif len(space):
+                    # Collision
+                    winning_fleet, fleet_to_remove_id = combine_fleets(self.registered_fleet[space[0]], fleet)
+                    # TODO: 
+                        # Resolve any allied fleets that ended up in the same square DONE
+                        # Check for fleet to fleet collisions (ennemy)
+                        # Check for fleet to shipyard collisions
+                    self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
+                else:  # in shipyard
+                    pass
+
+    # def get_ennemy_combat_info(self, player):
+    #     player_fleet_ids = [fleet.id for fleet in self.registered_fleet.values() if fleet.player_id == player.id] #TODO: Add adjecent damage.
+    #     oppenent_fleets = [fleet.id for fleet in self.registered_fleet.values() if fleet.player_id != player.id]
+
 
     def update_kore(self, board, turn) -> None:
         # TODO: Add ship destroyed kore
