@@ -59,9 +59,6 @@ def baseline(obs, config):
     for ship_id in decommisionned_ship:
         trajPlanner.fleet_handled.remove(ship_id)
 
-
-    ennemy_combat = trajPlanner.get_ennemy_combat_info(me)
-
     # if len(schedule_next_action):
     #     # Only works with one shipyard for the turn
     #     next_action = schedule_next_action[-1]
