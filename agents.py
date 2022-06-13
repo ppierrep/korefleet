@@ -1,9 +1,10 @@
 from dis import dis
 from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction, Point
 
-from map import Map, get_all_flight_plans_under_length, get_map_kore_convolutions
+from map import get_map_shipyard_position_candidates, get_all_flight_plans_under_length, get_map_kore_convolutions
 from trajectoryPlanner import TrajectoryPlanner, CollisionAndComeBackRoute, compute_flight_plan
 from utils import get_min_ship
+from planner import Planner
 
 
 # import debugpy
@@ -26,54 +27,23 @@ def get_shipyard_scaling(num_ships):
     else:
         return 12
 
-trajPlanner = None
-schedule_next_action = []
+planner = None
 
 def baseline(obs, config):
-    global trajPlanner
-    global schedule_next_action
+    global planner
 
     board = Board(obs, config)
-    map = Map(board)
-
-    me=board.current_player
-
     me = board.current_player
     turn = board.step
     spawn_cost = board.configuration.spawn_cost
     kore_left = me.kore
 
-    if not trajPlanner:
-        trajPlanner = TrajectoryPlanner(config.episodeSteps, board.cells.keys(), board)
+    if not planner:
+        planner = Planner(board, turn)
+    
+    planner.turn = turn
+    planner.compute_snapshots(board=board)
 
-    for fleet_id, fleet in board.fleets.items():
-        # print(fleet.position)
-        if fleet_id not in trajPlanner.fleet_handled:
-            trajPlanner.add_trajectory(turn=turn, fleet=fleet)
-            trajPlanner.fleet_handled.add(fleet_id)
-    
-    trajPlanner.map = board # update map
-    trajPlanner.update_kore(board, turn)
-    
-    decommisionned_ship = set(trajPlanner.fleet_handled) - set(board.fleets.keys())
-    for ship_id in decommisionned_ship:
-        trajPlanner.fleet_handled.remove(ship_id)
-
-    # if len(schedule_next_action):
-    #     # Only works with one shipyard for the turn
-    #     next_action = schedule_next_action[-1]
-    #     shipyID = next_action['shipyardID']
-    #     shipyAction = next_action['action']
-    #     shipyard = [s for s in me.shipyards if s.id == shipyID]
-    #     if len(shipyard):
-    #         shipyard = shipyard[0]
-    #         if next_action['delay'] == 0:
-    #             shipyard.next_action = shipyAction
-    #             schedule_next_action.pop()
-    #         else:
-    #             next_action['delay'] -= 1
-    #             shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left % 10)))
-    
     # loop through all shipyards you control
     for shipyard in me.shipyards:
         if shipyard.next_action is None:
@@ -94,7 +64,7 @@ def baseline(obs, config):
             if len(me.shipyard_ids) < get_shipyard_scaling(sum([f.ship_count for f in  me.fleets])) and shipyard.ship_count >= 75: # TODO: Get smarter unified metrics to scale shipyard production
                 min_dist = 4 # min and max dist from which we can place shipyard
                 max_dist = 7
-                shipyard_point_candidates = map.get_map_shipyard_position_candidates(distA=min_dist, distB=max_dist)
+                shipyard_point_candidates = get_map_shipyard_position_candidates(board, distA=min_dist, distB=max_dist)
                 convolutions = get_map_kore_convolutions(board, 7)
                 candidates = [(pos, convolutions[(pos.x, pos.y)]) for pos in shipyard_point_candidates]
                 best_position = list(sorted(candidates, key=lambda x: x[1], reverse=True))
@@ -108,7 +78,7 @@ def baseline(obs, config):
 
             elif shipyard.ship_count >= 21:
                 routes = get_all_flight_plans_under_length(7)
-                travel_simulations = trajPlanner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes, board=board)
+                travel_simulations = planner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes)
 
                 high_kore_routes = list(sorted([el for el in travel_simulations if not el.intercepted], key=lambda x: x.mined_kore_per_step, reverse=True))[0:35]  # get higly rewarded routes
                 closest_routes = list(sorted([el for el in high_kore_routes], key=lambda x: x.max_dist, reverse=False))[0:10]  # get closest routes

@@ -1,5 +1,6 @@
 from itertools import permutations, product
 from copy import deepcopy
+from ossaudiodev import SNDCTL_SEQ_CTRLRATE
 from typing import *
 import re
 
@@ -12,32 +13,17 @@ from trajectory import Trajectory
 
 
 
-class Map():
-    def __init__(self, board: Board):
-        self.map_cells: Dict[Point, Cell] = board.cells
-        self.player = board.current_player
-
-    def get_map_shipyard_position_candidates(self, distA: int, distB: int):
-        me = self.player
-        # dirty but working
-        ally_shipyard_positions = [s.cell.position for s in me.shipyards]
-        positions = []
-        for point in [point for point in self.map_cells]:
-            # altleast one at minDist/maxDist and all >= mindist 
-            dists = [point.distance_to(spoint, 21) for spoint in ally_shipyard_positions]
-            if all([d >= distA for d in dists]) and any([d <= distB for d in dists]):
-                positions.append(point)
-
-        return positions
-    
-    
-    # def convert_flight_plan_to_trajectories(self, origin_cell: Cell, flight_plans: List[str], turn: int):
-    #     trajectories = []
-    #     for flight_plan in flight_plans:
-    #         traj = Trajectory(origin_cell)
-    #         traj.set_flight_plan(flight_plan, turn)
-    #         trajectories.append(traj)
-    #     return trajectories
+def get_map_shipyard_position_candidates(snapshot: 'Board', distA: int, distB: int):
+    me = snapshot.current_player
+    # dirty but working
+    ally_shipyard_positions = [s.cell.position for s in me.shipyards]
+    positions = []
+    for point in [point for point in snapshot.cells.keys()]:
+        # altleast one at minDist/maxDist and all >= mindist 
+        dists = [point.distance_to(spoint, 21) for spoint in ally_shipyard_positions]
+        if all([d >= distA for d in dists]) and any([d <= distB for d in dists]):
+            positions.append(point)
+    return positions
 
 
 direction_re = '[NSWE]'
