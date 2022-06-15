@@ -114,7 +114,7 @@ def compress(expanded_flight_plan: str, compress_last: bool=False) -> str:
     path = ''
     _groupby = [(char, len(list(g))) for char, g in groupby(expanded_flight_plan)]
     for str_dir, length in _groupby:
-        path += str_dir + str(length) if length > 1 else str_dir
+        path += str_dir + str(length - 1) if length > 1 else str_dir
     
     # if last elem is E3, remove quantifier to save space
     return re.sub(r'(\d)$', '', path) if compress_last else path

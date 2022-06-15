@@ -7,7 +7,6 @@ import math
 from kaggle_environments.envs.kore_fleets.helpers import Point, Cell, Direction, Board
 from numpy import place
 from fleet import CustomFleet
-from map import Map
 from utils import collection_rate_for_ship_count, get_min_ship
 
 from trajectory import Trajectory, TrajectoryInfo, compress
@@ -35,6 +34,7 @@ class TrajectoryPlanner():
         self.fleet_planner = {}
         self.registered_fleet = {}
         self.kore_planner = {}
+        self.collisions_info = set()  # different object must have different hashes
         for turn in range(total_turns):
             self.fleet_planner[turn] = {point: [] for point in map_points}
             self.kore_planner[turn] = {point: 0 for point in map_points}
@@ -56,13 +56,19 @@ class TrajectoryPlanner():
                 if not len(space) and not self.map.cells[point].shipyard:
                     self.fleet_planner[turn + step][point].append(fleet.id)
                 elif len(space):
-                    # Collision
-                    winning_fleet, fleet_to_remove_id = combine_fleets(self.registered_fleet[space[0]], fleet)
+                    other_fleet = self.registered_fleet[space[0]]
+                    if fleet.player_id == other_fleet.player_id:
+                        # Collision between ally fleets
+                        _, fleet_to_remove_id = combine_fleets(other_fleet, fleet)
+                        self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
+                    else:
+                        # Collision between ennemy fleets
+                        
+                        pass
                     # TODO: 
                         # Resolve any allied fleets that ended up in the same square DONE
                         # Check for fleet to fleet collisions (ennemy)
                         # Check for fleet to shipyard collisions
-                    self.remove_trajectory(self.registered_fleet[fleet_to_remove_id], turn + step)
                 else:  # in shipyard
                     pass
 

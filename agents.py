@@ -1,9 +1,11 @@
+from collections import defaultdict
 from dis import dis
 from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction, Point
 
-from map import Map, get_all_flight_plans_under_length, get_map_kore_convolutions
+from map import get_map_shipyard_position_candidates, get_all_flight_plans_under_length, get_map_kore_convolutions
 from trajectoryPlanner import TrajectoryPlanner, CollisionAndComeBackRoute, compute_flight_plan
 from utils import get_min_ship
+from planner import Planner
 
 
 # import debugpy
@@ -26,57 +28,38 @@ def get_shipyard_scaling(num_ships):
     else:
         return 12
 
-trajPlanner = None
+planner = None
 schedule_next_action = []
 
 def baseline(obs, config):
-    global trajPlanner
+    global planner
     global schedule_next_action
 
     board = Board(obs, config)
-    map = Map(board)
-
-    me=board.current_player
-
     me = board.current_player
     turn = board.step
     spawn_cost = board.configuration.spawn_cost
     kore_left = me.kore
 
-    if not trajPlanner:
-        trajPlanner = TrajectoryPlanner(config.episodeSteps, board.cells.keys(), board)
+    if not planner:
+        planner = Planner(board, turn)
+    
+    planner.turn = turn
+    planner.compute_snapshots(board=board)
 
-    for fleet_id, fleet in board.fleets.items():
-        # print(fleet.position)
-        if fleet_id not in trajPlanner.fleet_handled:
-            trajPlanner.add_trajectory(turn=turn, fleet=fleet)
-            trajPlanner.fleet_handled.add(fleet_id)
-    
-    trajPlanner.map = board # update map
-    trajPlanner.update_kore(board, turn)
-    
-    decommisionned_ship = set(trajPlanner.fleet_handled) - set(board.fleets.keys())
-    for ship_id in decommisionned_ship:
-        trajPlanner.fleet_handled.remove(ship_id)
-
-    # if len(schedule_next_action):
-    #     # Only works with one shipyard for the turn
-    #     next_action = schedule_next_action[-1]
-    #     shipyID = next_action['shipyardID']
-    #     shipyAction = next_action['action']
-    #     shipyard = [s for s in me.shipyards if s.id == shipyID]
-    #     if len(shipyard):
-    #         shipyard = shipyard[0]
-    #         if next_action['delay'] == 0:
-    #             shipyard.next_action = shipyAction
-    #             schedule_next_action.pop()
-    #         else:
-    #             next_action['delay'] -= 1
-    #             shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left % 10)))
-    
     # loop through all shipyards you control
     for shipyard in me.shipyards:
-        if shipyard.next_action is None:
+        if len(actions:= [el for el in schedule_next_action if el == shipyard.id]):
+            next_action = actions[-1]
+            shipyAction = next_action['action']
+            if next_action['delay'] == 0:
+                shipyard.next_action = shipyAction
+                schedule_next_action = [el for el in schedule_next_action if el != shipyard.id]
+            else:
+                next_action['delay'] -= 1
+                shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left % 10)))
+
+        elif shipyard.next_action is None:
 
             # Always try to make ships (multiple of 3 (3 ships): N2S, 5 (8 ships): N3EWS), 21 (N3W6E6S)
             # Compute better reward for each combinaison (with % mined and regeneration taken into account)(deactivate withdrawer)
@@ -94,7 +77,7 @@ def baseline(obs, config):
             if len(me.shipyard_ids) < get_shipyard_scaling(sum([f.ship_count for f in  me.fleets])) and shipyard.ship_count >= 75: # TODO: Get smarter unified metrics to scale shipyard production
                 min_dist = 4 # min and max dist from which we can place shipyard
                 max_dist = 7
-                shipyard_point_candidates = map.get_map_shipyard_position_candidates(distA=min_dist, distB=max_dist)
+                shipyard_point_candidates = get_map_shipyard_position_candidates(board, distA=min_dist, distB=max_dist)
                 convolutions = get_map_kore_convolutions(board, 7)
                 candidates = [(pos, convolutions[(pos.x, pos.y)]) for pos in shipyard_point_candidates]
                 best_position = list(sorted(candidates, key=lambda x: x[1], reverse=True))
@@ -108,7 +91,7 @@ def baseline(obs, config):
 
             elif shipyard.ship_count >= 21:
                 routes = get_all_flight_plans_under_length(7)
-                travel_simulations = trajPlanner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes, board=board)
+                travel_simulations = planner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes)
 
                 high_kore_routes = list(sorted([el for el in travel_simulations if not el.intercepted], key=lambda x: x.mined_kore_per_step, reverse=True))[0:35]  # get higly rewarded routes
                 closest_routes = list(sorted([el for el in high_kore_routes], key=lambda x: x.max_dist, reverse=False))[0:10]  # get closest routes
@@ -122,6 +105,30 @@ def baseline(obs, config):
                     shipyard.next_action = action
                 else:
                     shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left / 10)))
+
+            elif len(event:= [ev for snap in planner.snapshots.values() for ev in snap.events if ev.event_type == 'collision' and ev.fleet_balance < 0]):
+                # is event avoidable ? intercept attacker or reinforce fleet
+                # is_fleet can be reinforced
+                for ev in event:
+                    ally_fleet_id = list(set(board.current_player.fleet_ids).intersection(ev.actors))[0]
+                    ally_pos = ev.actors.index(ally_fleet_id)
+
+                    ally_fleet_shipcount = ev.actors_shipcount[ally_pos]
+                    tmp = ev.actors_shipcount.copy()
+                    tmp.pop(ally_pos)
+                    ennemy_fleet_shipcount = sum(tmp)
+
+                    # route to combine < eta collision
+                    routes = planner.get_drifter_interception_routes(turn=ev.turn, target_vessel_id=ally_fleet_id, from_cell=shipyard.cell)
+                    valid_route = [r for r in routes if r.travel_time_to_drifter + r.time_before_sending_ship <= ev.turn - turn]
+                    if len(valid_route):
+                        max_available_fleet = valid_route[0].time_before_sending_ship * min(shipyard.max_spawn, int(kore_left % 10))
+                        if shipyard.ship_count + ally_fleet_shipcount + max_available_fleet > ennemy_fleet_shipcount:
+                            schedule_next_action.append({
+                                'shipyardID': shipyard.id,
+                                'action': ShipyardAction.launch_fleet_with_flight_plan(max_available_fleet, routes[0].round_trip_path),
+                                'delay': routes[0].time_before_sending_ship
+                            })
 
             # TODO: Check if only one ship get spawn per turn
             #   - can be troublesome with mutliple shipyard
