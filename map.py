@@ -144,6 +144,45 @@ def get_all_flight_plans_under_length(length: int) -> List[str]:
                 res.add(r)
     return list(res)
 
+def get_directions_under_length(length: int) -> List[str]:
+    '''
+    Returns: Set of precalculated routes that allow vessels to mine without drifing.
+    '''
+    routes = []
+    funcs = {
+        3 : generate_length_3_pos,
+        5 : generate_length_5_pos,
+        7 : generate_length_7_pos,
+    }
+    for k, func in funcs.items():
+        if length >= k:
+            routes.extend(func())
+    
+    res = []
+    for route in routes:
+        numbers = '123456789'
+        for i in numbers:
+            for j in numbers:
+                r = []
+                cursor = ''
+                for c in route:
+                    if c == 'i':
+                        point = Direction.to_point(Direction.from_char(cursor))
+                        r.extend(point for num in range(int(i)))
+                    elif c == 'j':
+                        point = Direction.to_point(Direction.from_char(cursor))
+                        r.extend(point for num in range(int(j)))
+                    else:
+                        r.append(Direction.to_point(Direction.from_char(c)))
+                    cursor = c
+
+                res.append(r)
+                if 'j' not in numbers:
+                    break
+
+    return list(res)
+
+
 
 def gkern(l=5, sig=1.):
     """

@@ -4,14 +4,19 @@ from kaggle_environments.envs.kore_fleets.helpers import Point, Cell, Direction,
 from kaggle_environments.helpers import Point, group_by, Direction
 from copy import deepcopy
 
+from event import Event
+from trajectoryPlanner import CollisionAndComeBackRoute
+
 
 class turnSnapshot(Board):
     def __init__(self, *args, **kwargs) -> None:
-        pass
+        super().__init__(*args, **kwargs)
+        self.events = []
 
     @staticmethod
     def convert(board: Board) -> 'turnSnapshot':
-        ts = turnSnapshot()
+        actions = [player.next_actions for player in board.players.values()]
+        ts = turnSnapshot(board.observation, board.configuration, actions)
 
         ts._step = board.step
         ts._remaining_overage_time = board._remaining_overage_time
@@ -22,11 +27,17 @@ class turnSnapshot(Board):
         ts._shipyards = board.shipyards  # Dict[ShipyardId, Shipyard]
         ts._cells = board.cells  # Dict[Point, Cell]
 
+        # Events:
+        #       - 
         ts.events = []
 
         # TODO: better convert custom.__dict__.update(base.__dict__)
         # trajectory = Trajectory(origin_cell=fleet.cell)
         return ts
+
+    def __deepcopy__(self, _) -> 'Board':
+        actions = [player.next_actions for player in self.players.values()]
+        return turnSnapshot(self.observation, self.configuration, actions)
 
     def next(self) -> 'turnSnapshot':
         """
@@ -37,6 +48,7 @@ class turnSnapshot(Board):
         """
         # Create a copy of the board to modify so we don't affect the current board
         board = deepcopy(self)
+        board._step += 1
         configuration = board.configuration
         convert_cost = configuration.convert_cost
         spawn_cost = configuration.spawn_cost
@@ -135,45 +147,70 @@ class turnSnapshot(Board):
         for position, collided_fleets in fleet_collision_groups.items():
             winner, deleted = resolve_collision(collided_fleets)
             shipyard = group_by(board.shipyards.values(), lambda shipyard: shipyard.position).get(position)
+
+            event = Event(actors=[f.id for f in collided_fleets], actors_shipcount=[f.ship_count for f in collided_fleets], event_type='collision', turn=self.step, position=position)
             if winner is not None:
                 winner.cell._fleet_id = winner.id
                 max_enemy_size = max([fleet.ship_count for fleet in deleted]) if deleted else 0
                 winner._ship_count -= max_enemy_size
+
             for fleet in deleted:
                 board._delete_fleet(fleet)
+                event.fleet_balance += -1 if fleet.player_id == self.current_player_id else 1
                 if winner is not None:
                     # Winner takes deleted fleets' kore
                     winner._kore += fleet.kore
+                    event.kore_balance += fleet.kore if winner.player_id == self.current_player_id else -fleet.kore
                 elif winner is None and shipyard and shipyard[0].player:
                     # Desposit the kore into the shipyard
                     shipyard[0].player._kore += fleet.kore
+                    event.deposited_kore += fleet.kore if shipyard[0].player.id == self.current_player_id else -fleet.kore
+                    event.kore_balance += 0 if shipyard[0].player.id == self.current_player_id else -fleet.kore
                 elif winner is None:
                     # Desposit the kore on the square
                     board.cells[position]._kore += fleet.kore
+            
+            if len(collided_fleets) > 1:
+                board.events.append(event)
 
 
         # Check for fleet to shipyard collisions
         for shipyard in list(board.shipyards.values()):
             fleet = shipyard.cell.fleet
             if fleet is not None and fleet.player_id != shipyard.player_id:
+                event = Event(actors=[fleet.id, shipyard.id], actors_shipcount=[f.ship_count for f in [fleet, shipyard]], event_type='shipyard_collision', turn=self.step, position=shipyard.cell.position)
                 if fleet.ship_count > shipyard.ship_count:
                     count = fleet.ship_count - shipyard.ship_count
                     board._delete_shipyard(shipyard)
                     board._add_shipyard(Shipyard(ShipyardId(create_uid()), count, shipyard.position, fleet.player.id, 1, board))
                     fleet.player._kore += fleet.kore
                     board._delete_fleet(fleet)
+                    
+                    event.deposited_kore += fleet.kore if fleet.player.id == self.current_player_id else -fleet.kore
+                    event.kore_balance += 0 if fleet.player.id == self.current_player_id else -fleet.kore
+                    event.shipyard_balance += 1 if fleet.player.id == self.current_player_id else -1
+                    event.fleet_balance += -1 if fleet.player.id == self.current_player_id else 1
                 else:
                     shipyard._ship_count -= fleet.ship_count
                     shipyard.player._kore += fleet.kore
                     board._delete_fleet(fleet)
 
+                    event.deposited_kore += -fleet.kore if fleet.player.id == self.current_player_id else fleet.kore
+                    event.kore_balance += -fleet.kore if fleet.player.id == self.current_player_id else 0
+                    event.fleet_balance += -1 if fleet.player.id == self.current_player_id else 1
+                board.events.append(event)
+
         # Deposit kore from fleets into shipyards
         for shipyard in list(board.shipyards.values()):
             fleet = shipyard.cell.fleet
             if fleet is not None and fleet.player_id == shipyard.player_id:
+                event = Event(actors=[fleet.id, shipyard.id], actors_shipcount=[f.ship_count for f in [fleet, shipyard]], event_type='kore_deposit', turn=self.step, position=shipyard.cell.position)
                 shipyard.player._kore += fleet.kore
                 shipyard._ship_count += fleet.ship_count
                 board._delete_fleet(fleet)
+                
+                event.deposited_kore += fleet.kore if fleet.player_id == self.current_player_id else -fleet.kore
+                board.events.append(event)
 
         # apply fleet to fleet damage on all orthagonally adjacent cells
         incoming_fleet_dmg = DefaultDict(lambda: DefaultDict(int))
@@ -190,14 +227,26 @@ class turnSnapshot(Board):
         for fleet_id, fleet_dmg_dict in incoming_fleet_dmg.items():
             fleet = board.fleets[fleet_id]
             damage = sum(fleet_dmg_dict.values())
+            event = Event(
+                actors=[fleet.id] + [fid for fid in fleet_dmg_dict.keys()],
+                actors_shipcount=[fleet.ship_count] + [f for f in fleet_dmg_dict.values()],
+                event_type='adjacent_combat',
+                turn=self.step,
+                position=fleet.cell.position
+            )
             if damage >= fleet.ship_count:
                 fleet.cell._kore += fleet.kore / 2
                 to_split = fleet.kore / 2
                 for f_id, dmg in fleet_dmg_dict.items():
                     to_distribute[f_id][fleet.position.to_index(board.configuration.size)] = to_split * dmg/damage
                 board._delete_fleet(fleet)
+
+                event.fleet_balance += 1 if fleet.player_id != self.current_player_id else -1
+                # TODO find usage for damage since it is reciprocal
             else:
                 fleet._ship_count -= damage
+            
+            board.events.append(event)
 
         # give kore claimed above to surviving fleets, otherwise add it to the kore of the tile where the fleet died
         for fleet_id, loc_kore_dict in to_distribute.items():
@@ -224,7 +273,5 @@ class turnSnapshot(Board):
                     cell._kore = next_kore
 
         board._step += 1
-
-        # self.print()
 
         return board

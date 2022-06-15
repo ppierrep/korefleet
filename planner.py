@@ -5,6 +5,7 @@ import re
 from kaggle_environments.envs.kore_fleets.helpers import Cell, Direction, Board, PlayerId, Player, FleetId, Fleet, ShipyardId, Shipyard
 from utils import get_min_ship, collection_rate_for_ship_count
 from turnSnapshot import turnSnapshot
+from trajectoryPlanner import CollisionAndComeBackRoute
 
 class Planner():
     '''
@@ -21,9 +22,10 @@ class Planner():
         self.snapshots = {}
         snapshot = turnSnapshot.convert(board)
         self.snapshots[0] = snapshot
-        for i in range(1, 30):
+        for i in range(1, 15):
             new_snapshot = snapshot.next()
             self.snapshots[i] = new_snapshot
+            snapshot = new_snapshot
 
     def get_simulations(self, origin_cell: Cell, turn: int, routes: List[int]):
             res = []
@@ -86,6 +88,29 @@ class Planner():
         info.mined_kore_per_step = mined_kore / info.flight_plan_time
 
         return info
+
+    def get_drifter_interception_routes(self, from_cell: Cell, turn: int, target_vessel_id: int) -> List[CollisionAndComeBackRoute]:
+        '''only launch when perigee'''
+        routes = []
+        # fleet = self..fleets[drifter_id]
+        for time_elapsed, snapshot in enumerate(list(self.snapshots.values())):  # Compute all possible routes from now to 15 turn ahead
+            # Check the feasibility of launching a withdrawer to this pos
+            # add followind direction after path has been completed
+            if target_vessel_id in snapshot.fleets:            
+                target = snapshot.fleets[target_vessel_id]
+                if target.position.distance_to(from_cell.position, 21) <= time_elapsed:  # withdrawer has enough time to get to drifter
+                    # if drifter_id not in fleet_ids:
+                    route = CollisionAndComeBackRoute(
+                        fleet=target,
+                        time_elapsed=time_elapsed,
+                        distance_to_drifter=target.position.distance_to(from_cell.position, 21), # TODO: get board configuration size as distance
+                        turn=turn,
+                        origin_point=from_cell.position,
+                        target_point=target.position
+                    )
+                    if route.time_before_sending_ship >= 0:
+                        routes.append(route)
+        return routes
 
 
 class RouteSimulationInfo():

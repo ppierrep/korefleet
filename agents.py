@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dis import dis
 from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction, Point
 
@@ -28,9 +29,11 @@ def get_shipyard_scaling(num_ships):
         return 12
 
 planner = None
+schedule_next_action = []
 
 def baseline(obs, config):
     global planner
+    global schedule_next_action
 
     board = Board(obs, config)
     me = board.current_player
@@ -46,7 +49,17 @@ def baseline(obs, config):
 
     # loop through all shipyards you control
     for shipyard in me.shipyards:
-        if shipyard.next_action is None:
+        if len(actions:= [el for el in schedule_next_action if el == shipyard.id]):
+            next_action = actions[-1]
+            shipyAction = next_action['action']
+            if next_action['delay'] == 0:
+                shipyard.next_action = shipyAction
+                schedule_next_action = [el for el in schedule_next_action if el != shipyard.id]
+            else:
+                next_action['delay'] -= 1
+                shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left % 10)))
+
+        elif shipyard.next_action is None:
 
             # Always try to make ships (multiple of 3 (3 ships): N2S, 5 (8 ships): N3EWS), 21 (N3W6E6S)
             # Compute better reward for each combinaison (with % mined and regeneration taken into account)(deactivate withdrawer)
@@ -92,6 +105,30 @@ def baseline(obs, config):
                     shipyard.next_action = action
                 else:
                     shipyard.next_action = ShipyardAction.spawn_ships(min(shipyard.max_spawn, int(kore_left / 10)))
+
+            elif len(event:= [ev for snap in planner.snapshots.values() for ev in snap.events if ev.event_type == 'collision' and ev.fleet_balance < 0]):
+                # is event avoidable ? intercept attacker or reinforce fleet
+                # is_fleet can be reinforced
+                for ev in event:
+                    ally_fleet_id = list(set(board.current_player.fleet_ids).intersection(ev.actors))[0]
+                    ally_pos = ev.actors.index(ally_fleet_id)
+
+                    ally_fleet_shipcount = ev.actors_shipcount[ally_pos]
+                    tmp = ev.actors_shipcount.copy()
+                    tmp.pop(ally_pos)
+                    ennemy_fleet_shipcount = sum(tmp)
+
+                    # route to combine < eta collision
+                    routes = planner.get_drifter_interception_routes(turn=ev.turn, target_vessel_id=ally_fleet_id, from_cell=shipyard.cell)
+                    valid_route = [r for r in routes if r.travel_time_to_drifter + r.time_before_sending_ship <= ev.turn - turn]
+                    if len(valid_route):
+                        max_available_fleet = valid_route[0].time_before_sending_ship * min(shipyard.max_spawn, int(kore_left % 10))
+                        if shipyard.ship_count + ally_fleet_shipcount + max_available_fleet > ennemy_fleet_shipcount:
+                            schedule_next_action.append({
+                                'shipyardID': shipyard.id,
+                                'action': ShipyardAction.launch_fleet_with_flight_plan(max_available_fleet, routes[0].round_trip_path),
+                                'delay': routes[0].time_before_sending_ship
+                            })
 
             # TODO: Check if only one ship get spawn per turn
             #   - can be troublesome with mutliple shipyard
