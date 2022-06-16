@@ -1,4 +1,6 @@
+from map import get_all_flight_plans_under_length
 from py_trees import behaviour, common
+from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction, Point
 
 class AvailableRoutes(behaviour.Behaviour):
     def __init__(self, name, maximum_length):
@@ -13,6 +15,13 @@ class AvailableRoutes(behaviour.Behaviour):
         """
         super().__init__(name)
         self.maximum_length = maximum_length
+        
+        self.blackboard = self.attach_blackboard_client("Board")
+        self.blackboard.register_key(key="board", access=common.Access.READ)
+        self.blackboard.register_key(key="planner", access=common.Access.READ)
+        self.blackboard.register_key(key="shipyard", access=common.Access.READ)
+
+        self.blackboard.register_key(key="selected_route", access=common.Access.WRITE)
 
     def setup(self):
         """
@@ -67,16 +76,21 @@ class AvailableRoutes(behaviour.Behaviour):
           - return a py_trees.common.Status.[RUNNING, SUCCESS, FAILURE]
         """
         self.logger.debug("  %s [Foo::update()]" % self.name)
-        # ready_to_make_a_decision = random.choice([True, False])
-        # decision = random.choice([True, False])
-        # if not ready_to_make_a_decision:
-        #     return py_trees.common.Status.RUNNING
-        # elif decision:
-        #     self.feedback_message = "We are not bar!"
-        #     return py_trees.common.Status.SUCCESS
-        # else:
-        #     self.feedback_message = "Uh oh"
-        #     return py_trees.common.Status.FAILURE
+        board = self.blackboard.board
+        planner = self.blackboard.planner
+        turn = board.step
+        shipyard = self.blackboard.shipyard
+
+        routes = get_all_flight_plans_under_length(7)
+        travel_simulations = planner.get_simulations(origin_cell=shipyard.cell, turn=turn, routes=routes)
+
+        high_kore_routes = list(sorted([el for el in travel_simulations if not el.intercepted], key=lambda x: x.mined_kore_per_step, reverse=True))[0:35]  # get higly rewarded routes
+        closest_routes = list(sorted([el for el in high_kore_routes], key=lambda x: x.max_dist, reverse=False))[0:10]  # get closest routes
+        low_wasted_routes = list(sorted([el for el in closest_routes], key=lambda x: x.empty_cells_ratio, reverse=False))[0:5]  # get routes with lower empty cells count
+        selected_route = list(sorted([el for el in low_wasted_routes], key=lambda x: x.same_trajectory_count, reverse=False))
+
+        self.blackboard.selected_route = selected_route
+        return common.Status.SUCCESS
 
     def terminate(self, new_status):
         """
@@ -91,6 +105,8 @@ class AvailableRoutes(behaviour.Behaviour):
 class IsRoute(behaviour.Behaviour):
     def __init__(self, name):
         super().__init__(name)
+        self.blackboard = self.attach_blackboard_client("Board")
+        self.blackboard.register_key(key="selected_route", access=common.Access.READ)
 
     def setup(self):
         self.logger.debug("  %s [Foo::setup()]" % self.name)
@@ -100,6 +116,9 @@ class IsRoute(behaviour.Behaviour):
 
     def update(self):
         self.logger.debug("  %s [Foo::update()]" % self.name)
+        if len(self.blackboard.selected_route):
+          return common.Status.SUCCESS
+        return common.Status.FAILURE
 
     def terminate(self, new_status):
         self.logger.debug("  %s [Foo::terminate().terminate()][%s->%s]" % (self.name, self.status, new_status))
@@ -108,6 +127,33 @@ class IsRoute(behaviour.Behaviour):
 class LaunchFleet(behaviour.Behaviour):
     def __init__(self, name):
         super().__init__(name)
+        self.blackboard = self.attach_blackboard_client("Board")
+        self.blackboard.register_key(key="selected_route", access=common.Access.READ)
+        self.blackboard.register_key(key="action", access=common.Access.WRITE)
+
+    def setup(self):
+        self.logger.debug("  %s [Foo::setup()]" % self.name)
+
+    def initialise(self):
+        self.logger.debug("  %s [Foo::initialise()]" % self.name)
+        self.blackboard.action = None
+
+    def update(self):
+        self.logger.debug("  %s [Foo::update()]" % self.name)
+        selected_route = self.blackboard.selected_route[0]
+        action = ShipyardAction.launch_fleet_with_flight_plan(selected_route.min_fleet, selected_route.flight_plan)
+        self.blackboard.action = action
+        return common.Status.SUCCESS
+
+    def terminate(self, new_status):
+        self.logger.debug("  %s [Foo::terminate().terminate()][%s->%s]" % (self.name, self.status, new_status))
+
+
+class NotEnoughFleet(behaviour.Behaviour):
+    def __init__(self, name):
+        super().__init__(name)
+        self.blackboard = self.attach_blackboard_client("Board")
+        self.blackboard.register_key(key="shipyard", access=common.Access.READ)
 
     def setup(self):
         self.logger.debug("  %s [Foo::setup()]" % self.name)
@@ -117,9 +163,9 @@ class LaunchFleet(behaviour.Behaviour):
 
     def update(self):
         self.logger.debug("  %s [Foo::update()]" % self.name)
+        if self.blackboard.shipyard.ship_count < 21:
+            return common.Status.SUCCESS
+        return common.Status.FAILURE
 
     def terminate(self, new_status):
         self.logger.debug("  %s [Foo::terminate().terminate()][%s->%s]" % (self.name, self.status, new_status))
-
-
-        LaunchFleet
