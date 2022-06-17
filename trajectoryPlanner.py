@@ -232,15 +232,17 @@ def combine_fleets(f1: CustomFleet, f2: CustomFleet) -> Tuple[CustomFleet, Custo
 def compute_flight_plan(origin_point, target_point, round_trip: bool=False, compress_last: bool=True) -> str:
     vector = target_point - origin_point
     components = abs(vector)
-    _x = 'W' if vector.x < 0 else 'E'
-    _y = 'S' if vector.y < 0 else 'N'
+    size = 21
+    
+    dir_x = 'E' if components.x < size/2 else 'W'
+    dir_y = 'N' if components.y < size/2 else 'S'
 
-    xc = components.x if components.x <= 1 else components.x - 1  # "N5E" go north > 5E go north > 4E ...
-    yc = components.y if components.y <= 1 else components.y - 1
+    xc = components.x if components.x < size/2 else size - components.x
+    yc = components.y if components.y < size/2 else size - components.y
 
     if not round_trip:
-        return compress(''.join([_x * xc] + [_y * yc]), compress_last=compress_last)  # first deplacement is always free
+        return compress(''.join([dir_x * xc] + [dir_y * yc]), compress_last=compress_last)  # first deplacement is always free
     else:
-        one_way = ''.join([_x * xc] + [_y * yc])
+        one_way = ''.join([dir_x * xc] + [dir_y * yc])
         round_trip = ''.join(reversed([Direction.from_char(char).opposite().to_char() for char in one_way]))
         return compress(one_way + round_trip, compress_last=compress_last)
