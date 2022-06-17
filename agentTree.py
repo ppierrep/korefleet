@@ -5,7 +5,7 @@ from py_trees import behaviours, composites, blackboard, common, display, loggin
 import functools
 import pandas as pd
 
-from behaviorTree import gathering, build, recon, defence
+from behaviorTree import gathering, build, recon, defence, generic
 from planner import Planner
 
 planner = None
@@ -91,11 +91,22 @@ def create_shipyard_defence():
 
     return root
 
+def create_shipyard_expand():
+    '''
+        sequence >> enough fleets, expand
+    '''
+    root = composites.Sequence("root (shipyard defence)")
+    enough_fleet = generic.EnoughFleet('Is enough fleet for shipyard building', number=75)
+    build_shipyard = build.BuildShipyard('Build Shipyard')
+    root.add_children([enough_fleet, build_shipyard])
+
+    return root
+
 # build_fleet
 
 planner = None
 root = composites.Selector("Bot")
-root.add_children([create_shipyard_defence(), create_gathering()])
+root.add_children([create_shipyard_defence(), create_shipyard_expand(), create_gathering()])
 
 blackboard.Blackboard.enable_activity_stream(maximum_size=100)
 _blackboard = blackboard.Client(name="Board")
