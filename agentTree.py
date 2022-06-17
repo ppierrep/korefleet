@@ -3,8 +3,9 @@ import functools
 from kaggle_environments.envs.kore_fleets.helpers import Board, ShipyardAction, Point
 from py_trees import behaviours, composites, blackboard, common, display, logging, visitors, trees
 import functools
+import pandas as pd
 
-from behaviorTree import gathering, build
+from behaviorTree import gathering, build, recon, defence
 from planner import Planner
 
 planner = None
@@ -13,12 +14,12 @@ schedule_next_action = []
 
 import debugpy
 
-debugpy.listen(5678)
+debugpy.listen(5679)
 print("Waiting for debugger attach")
 debugpy.wait_for_client()
 # logging.level = logging.Level.DEBUG
 
-def post_tick_handler(snapshot_visitor, behaviour_tree, show = False):
+def post_tick_handler(snapshot_visitor, behaviour_tree, show = False, tree_res=None, activity_stream=None):
     if show:
         print(
         display.unicode_tree(
@@ -26,11 +27,22 @@ def post_tick_handler(snapshot_visitor, behaviour_tree, show = False):
             visited=snapshot_visitor.visited,
             previously_visited=snapshot_visitor.visited,
             show_status=True
+            )
         )
-    )
+    elif tree_res is not None:
+        tree_res[0] = display.unicode_tree(
+                    behaviour_tree.root,
+                    visited=snapshot_visitor.visited,
+                    previously_visited=snapshot_visitor.visited,
+                    show_status=True
+        )
 
 
-def create_root():
+def create_gathering(greedy=True):
+    '''
+        Args: 
+            greedy: Always take the highest gross route independently of fleet number
+    '''
     root = composites.Selector("root (gathering)")
     
     not_enough_fleet_sequence = composites.Sequence("Fleet number check")
@@ -38,7 +50,7 @@ def create_root():
     build_fleet_1 = build.BuildFleet("Build fleet")
     
     go_gather_sequence = composites.Sequence("Gathering")
-    get_all_available_routes = gathering.AvailableRoutes(name="Get all routes of max length 7", maximum_length=7)
+    get_all_available_routes = gathering.AvailableRoutes(name="Get all routes of max length 7", greedy=greedy)
     isRoute_selector = composites.Selector("Is_Route")
     
     launch_sequence = composites.Sequence("Launch Fleet")
@@ -56,26 +68,67 @@ def create_root():
     
     return root
 
+def create_shipyard_defence():
+    '''
+        sequence >> inc fleet ?, enough_to_defend, selector
+        selector >> sequence1, sequence2
+        sequence1 >> need to build, build ship
+        sequence2 >> gathering (with leftovers ship) 
+    '''
+    root = composites.Sequence("root (shipyard defence)")
+    is_inc_fleet = recon.isIncomingFleet("Incoming fleet")
+    enough_to_defend = defence.EnoughToDefend("Enough fleet to defend")
+    selector = composites.Selector("Build or use leftover fleet to mine")
+    root.add_children([is_inc_fleet, enough_to_defend, selector])
+
+    sequence1 = composites.Sequence("Fleet production")
+    gather = create_gathering(greedy=False)  # add leftover number which will define number of usablefleet for a mining mission
+    selector.add_children([sequence1, gather])
+
+    need_to_build = build.NeedToBuild("Need to build")
+    build_fleet = build.BuildFleet("Build fleet")
+    sequence1.add_children([need_to_build, build_fleet])
+
+    return root
+
 # build_fleet
 
 planner = None
-root = create_root()
-blackboard = blackboard.Client(name="Board")
-blackboard.register_key(key="board", access=common.Access.WRITE)
-blackboard.register_key(key="planner", access=common.Access.WRITE)
-blackboard.register_key(key="shipyard", access=common.Access.WRITE)
-blackboard.register_key(key="me", access=common.Access.WRITE)
-blackboard.register_key(key="action", access=common.Access.READ)
+root = composites.Selector("Bot")
+root.add_children([create_shipyard_defence(), create_gathering()])
+
+blackboard.Blackboard.enable_activity_stream(maximum_size=100)
+_blackboard = blackboard.Client(name="Board")
+_blackboard.register_key(key="board", access=common.Access.WRITE)
+_blackboard.register_key(key="planner", access=common.Access.WRITE)
+_blackboard.register_key(key="shipyard", access=common.Access.WRITE)
+_blackboard.register_key(key="me", access=common.Access.WRITE)
+_blackboard.register_key(key="action", access=common.Access.READ)
+
+
+_blackboard.register_key(key="incoming_fleet_infos", access=common.Access.READ)
+_blackboard.register_key(key="not_needed_fleet", access=common.Access.READ)
+_blackboard.register_key(key="need_to_build", access=common.Access.READ)
+
 root.setup_with_descendants()
 
-
+turns = []
+tree_res = []
+activity_stream = []
 def baselineTree(obs, config):
-    global blackboard
+    global _blackboard
     global planner
     global root
     board = Board(obs, config)
     me = board.current_player
     turn = board.step
+    
+    # visualization only
+    global turns
+    global tree_res
+    global activity_stream
+    tree = ["", ""]
+
 
     if not planner:
         planner = Planner(board, turn)
@@ -83,9 +136,9 @@ def baselineTree(obs, config):
     planner.turn = turn
     planner.compute_snapshots(board=board)
 
-    blackboard.board = board
-    blackboard.planner = planner
-    blackboard.me = me
+    _blackboard.board = board
+    _blackboard.planner = planner
+    _blackboard.me = me
 
     snapshot_visitor = visitors.SnapshotVisitor()
     behaviour_tree = trees.BehaviourTree(root)
@@ -93,14 +146,33 @@ def baselineTree(obs, config):
         functools.partial(
             post_tick_handler,
             snapshot_visitor,
-            show=True
+            show=False,
+            tree_res=tree
         ))
     behaviour_tree.visitors.append(snapshot_visitor)
     
     for shipyard in me.shipyards:
-        blackboard.shipyard = shipyard
+        _blackboard.shipyard = shipyard
         behaviour_tree.tick()
-        shipyard.next_action = blackboard.action
+        shipyard.next_action = _blackboard.action
+
+
+    turns.append(turn)
+    tree_res.append(tree[0])
+    activity_stream_items = [el for el in blackboard.Blackboard.activity_stream.data if el.key in ['/incoming_fleet_infos', '/not_needed_fleet', '/need_to_build']]
+    if len(activity_stream_items):
+        activity_stream.append(str([{el.key: el.current_value} for el in  activity_stream_items]))
+    else:
+        activity_stream.append("")
+
+    blackboard.Blackboard.activity_stream.data.clear()
+    pd.DataFrame(
+        data={
+            'turn': turns,
+            'tree': tree_res,
+            'activity_stream': activity_stream
+        }
+    ).to_csv('tree_res.csv')
 
     return me.next_actions
 

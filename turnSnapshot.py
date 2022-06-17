@@ -48,7 +48,6 @@ class turnSnapshot(Board):
         """
         # Create a copy of the board to modify so we don't affect the current board
         board = deepcopy(self)
-        board._step += 1
         configuration = board.configuration
         convert_cost = configuration.convert_cost
         spawn_cost = configuration.spawn_cost

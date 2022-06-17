@@ -16,7 +16,7 @@ class Event():
         self.actors = actors
         self.actors_shipcount = actors_shipcount
         self.event_type = event_type
-        self.turn = turn + 1
+        self.turn = turn
         self.position = position
         
         self.kore_balance = kore_balance
