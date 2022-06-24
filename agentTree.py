@@ -12,12 +12,12 @@ planner = None
 schedule_next_action = []
 
 
-import debugpy
+# import debugpy
 
-debugpy.listen(5679)
-print("Waiting for debugger attach")
-debugpy.wait_for_client()
-# logging.level = logging.Level.DEBUG
+# debugpy.listen(5679)
+# print("Waiting for debugger attach")
+# debugpy.wait_for_client()
+# # logging.level = logging.Level.DEBUG
 
 def post_tick_handler(snapshot_visitor, behaviour_tree, show = False, tree_res=None, activity_stream=None):
     if show:
@@ -95,18 +95,41 @@ def create_shipyard_expand():
     '''
         sequence >> enough fleets, expand
     '''
-    root = composites.Sequence("root (shipyard defence)")
+    root = composites.Sequence("root (shipyard expand)")
     enough_fleet = generic.EnoughFleet('Is enough fleet for shipyard building', number=75)
+    enough_kore = generic.EnoughKore('Is enough kore for shipyard building', number=300)
     build_shipyard = build.BuildShipyard('Build Shipyard')
-    root.add_children([enough_fleet, build_shipyard])
+    root.add_children([enough_fleet, build_shipyard, enough_kore])
 
     return root
+
+def scale_fleet_generation_with_ennemy():
+    '''
+        sequence >> ennemies are amassing units, build fleet
+    '''
+    root = composites.Sequence("root (fleet generation mirroring)")
+    ennemy_is_bluiding_up_fleet = recon.EnnemyIsAmmassingFleet('Closest ennemy is Amassing Fleet')
+    build_up_force = build.BuildFleet("Build fleet")
+    root.add_children([ennemy_is_bluiding_up_fleet, build_up_force])
+
+    return root
+
+def raid_shipyards():
+    root = composites.Sequence("root (raid shyipyard)")
+    
+    is_actual_raider_in_need_of_assisstance = None
+    assist_raider = None
+
+    find_best_possible_candidates = None
+    launch_raider = None
+
+    return 
 
 # build_fleet
 
 planner = None
 root = composites.Selector("Bot")
-root.add_children([create_shipyard_defence(), create_shipyard_expand(), create_gathering()])
+root.add_children([create_shipyard_defence(), scale_fleet_generation_with_ennemy(), create_shipyard_expand(), create_gathering()])
 
 blackboard.Blackboard.enable_activity_stream(maximum_size=100)
 _blackboard = blackboard.Client(name="Board")
@@ -165,6 +188,8 @@ def baselineTree(obs, config):
     for shipyard in me.shipyards:
         _blackboard.shipyard = shipyard
         behaviour_tree.tick()
+        # if isinstance(event :=_blackboard.action, str):
+        #     # special events 
         shipyard.next_action = _blackboard.action
 
 
