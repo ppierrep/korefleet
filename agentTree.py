@@ -5,7 +5,7 @@ from py_trees import behaviours, composites, blackboard, common, display, loggin
 import functools
 import pandas as pd
 
-from behaviorTree import gathering, build, recon, defence, generic
+from behaviorTree import gathering, build, recon, defence, generic, attack
 from planner import Planner
 
 planner = None
@@ -98,8 +98,9 @@ def create_shipyard_expand():
     root = composites.Sequence("root (shipyard expand)")
     enough_fleet = generic.EnoughFleet('Is enough fleet for shipyard building', number=75)
     enough_kore = generic.EnoughKore('Is enough kore for shipyard building', number=300)
+    more_fleet = recon.MoreFleet('Is more fleet than ennemy', by=60)
     build_shipyard = build.BuildShipyard('Build Shipyard')
-    root.add_children([enough_fleet, build_shipyard, enough_kore])
+    root.add_children([enough_fleet, enough_kore, more_fleet, build_shipyard])
 
     return root
 
@@ -116,19 +117,24 @@ def scale_fleet_generation_with_ennemy():
 
 def raid_shipyards():
     root = composites.Sequence("root (raid shyipyard)")
-    
-    is_actual_raider_in_need_of_assisstance = None
-    assist_raider = None
 
-    find_best_possible_candidates = None
-    launch_raider = None
+    # assist_raider_sequence = composites.Sequence("Assist raider sequence")
+    # is_actual_raider_in_need_of_assisstance = common.Status.FAILURE
+    # assist_raider = common.Status.FAILURE
+    # assist_raider_sequence.add_children([is_actual_raider_in_need_of_assisstance, assist_raider])
 
-    return 
+    root = composites.Sequence("Launch raider sequence")
+    find_best_possible_raiding_candidates = recon.FindRaidingCandidates("Find raiding candidates")
+    launch_raider = attack.RaidShipyard("Attack Shipyard")
+
+    root.add_children([find_best_possible_raiding_candidates, launch_raider])
+    return root
 
 # build_fleet
 
 planner = None
 root = composites.Selector("Bot")
+# root.add_children([create_shipyard_defence(), scale_fleet_generation_with_ennemy(), create_shipyard_expand(), raid_shipyards(), create_gathering()])
 root.add_children([create_shipyard_defence(), scale_fleet_generation_with_ennemy(), create_shipyard_expand(), create_gathering()])
 
 blackboard.Blackboard.enable_activity_stream(maximum_size=100)

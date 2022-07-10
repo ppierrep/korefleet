@@ -22,9 +22,9 @@ class EnoughToDefend(behaviour.Behaviour):
         # TODO: Theorically, we have to take into account: ship refueling and max spawn increasing
         max_available_fleet = inc_fleet_infos['residing_fleet_number'] + inc_fleet_infos["eta"] * min(shipyard.max_spawn, int(self.blackboard.me.kore % 10))
 
-        if max_available_fleet < inc_fleet_infos['incomming_fleet_number']:
+        if max_available_fleet <= inc_fleet_infos['incomming_fleet_number']:
             return common.Status.FAILURE
         else:
-            self.blackboard.need_to_build = inc_fleet_infos['residing_fleet_number'] < inc_fleet_infos['incomming_fleet_number']
-            self.blackboard.not_needed_fleet = max_available_fleet - inc_fleet_infos['incomming_fleet_number']
+            self.blackboard.need_to_build = inc_fleet_infos["estimated_victory"] <= 0
+            self.blackboard.not_needed_fleet = inc_fleet_infos['residing_fleet_number'] - inc_fleet_infos['incomming_fleet_number'] - 1
             return common.Status.SUCCESS

@@ -8,12 +8,6 @@ from utils import get_min_ship
 from planner import Planner
 
 
-# import debugpy
-
-# debugpy.listen(5678)
-# print("Waiting for debugger attach")
-# debugpy.wait_for_client()
-
 def get_shipyard_scaling(num_ships):
     if num_ships < 100:
         return 1
@@ -43,7 +37,7 @@ def baseline(obs, config):
 
     if not planner:
         planner = Planner(board, turn)
-    
+
     planner.turn = turn
     planner.compute_snapshots(board=board)
 
@@ -62,14 +56,14 @@ def baseline(obs, config):
         elif shipyard.next_action is None:
 
             # Always try to make ships (multiple of 3 (3 ships): N2S, 5 (8 ships): N3EWS), 21 (N3W6E6S)
-            # Compute better reward for each combinaison (with % mined and regeneration taken into account)(deactivate withdrawer)
+            # Compute better reward for each combination (with % mined and regeneration taken into account)(deactivate withdrawer)
             # 
             # Add Multiple shipyard handling:
             #   - In between high value stars
             #   - Start at one finish at one
             #   - Transfer ships to keep ships count averaged
             #
-            # Create a miner baseline rule based IA
+            # Create a miner baseline rule-based IA
             #
             # ------------------------------------------
             # Use logic of withdrawer to compute routes to attack this IA.
